@@ -2,17 +2,23 @@ import threading
 
 
 class AsyncTask:
-    def __init__(self, args):
+    def __init__(self, task_id, args):
+        self.task_id = task_id
         self.args = args
         self.yields = []
         self.results = []
 
 
-async_tasks = []
+async_tasks: list[AsyncTask] = []
+running_task: AsyncTask | None = None
+finished_tasks: list[AsyncTask] = []
+stop_or_skipped_tasks: list[AsyncTask] = []
 
 
 def worker():
     global async_tasks
+    global running_task
+    global finished_tasks
 
     import traceback
     import math
@@ -805,9 +811,11 @@ def worker():
             except ldm_patched.modules.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')
+                    async_task.yields.append(['skipped', (100 / len(tasks) * (current_task_id + 1), "User skipped")])
                     continue
                 else:
                     print('User stopped')
+                    async_task.yields.append(['stopped', "User stopped"])
                     break
 
             execution_time = time.perf_counter() - execution_start_time
@@ -820,14 +828,16 @@ def worker():
         if len(async_tasks) > 0:
             task = async_tasks.pop(0)
             try:
+                running_task = task
                 handler(task)
                 build_image_wall(task)
-                task.yields.append(['finish', task.results])
                 pipeline.prepare_text_encoder(async_call=True)
             except:
                 traceback.print_exc()
+            finally:
                 task.yields.append(['finish', task.results])
-    pass
+                finished_tasks.append(task)
+                running_task = None
 
 
 threading.Thread(target=worker, daemon=True).start()
