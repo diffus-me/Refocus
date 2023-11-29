@@ -1,0 +1,683 @@
+import logging
+import os
+import json
+import uuid
+import base64
+import io
+import mimetypes
+import imghdr
+import asyncio
+import aiohttp
+import aiofiles
+import aiofiles.os
+import hashlib
+import copy
+import socket
+
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, WebSocket, Header, HTTPException, WebSocketDisconnect, WebSocketException, status
+from fastapi.responses import JSONResponse
+from typing import Annotated, Callable
+from PIL import Image
+import numpy as np
+from pydantic import BaseModel, Field, BaseSettings
+
+import modules.config
+import modules.flags as flags
+import modules.advanced_parameters as advanced_parameters
+import modules.style_sorter as style_sorter
+from modules.database import (
+    create_tables,
+    get_db,
+    insert_focus_task_record,
+    update_focus_task_record,
+    query_focus_task_record_with_status
+)
+
+
+class Settings(BaseSettings):
+    api_image_dir: str = "/api-outputs"
+    s3_prefix: str = ""
+
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()
+
+logger = logging.getLogger("uvicorn.error")
+
+
+class Status(BaseModel):
+    percentage: int = 0
+    title: str = ""
+    images: list[np.ndarray] = []
+    image_filepaths: list[str] = []
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class QueuingStatus(BaseModel):
+    position: int = 0
+    total: int = 0
+
+
+class Progress(BaseModel):
+    flag: str
+    task_id: str
+    status: Status
+    queuing_status: QueuingStatus | None = None
+
+
+class LoraConfig(BaseModel):
+    lora_model: str = Field(
+        default=modules.config.default_loras[0][0], description=f'LoRA model name. Options are: {["None"] + modules.config.lora_filenames}')
+    lora_weight: float = Field(
+        default=modules.config.default_loras[0][1], description='LoRA weight.')
+
+
+class ImageSource(BaseModel):
+    image_url: str | None = Field(default=None, description=(
+        "The url to the image. "
+        "image_url and encoded_image at least one must be provided."))
+    encoded_image: str | None = Field(default=None, description=(
+        "Base64 encoded image. "
+        "If both image_url and encoded_image are provided, encoded_image will be used."))
+
+
+class RemoteImageSource(ImageSource):
+    image_filepath: str | None = None
+
+
+class ControlConfig(BaseModel):
+    ip_image: ImageSource | None = Field(
+        default=None, description='Image prompt for generation.')
+    ip_stop: float = Field(
+        default=flags.default_parameters[flags.default_ip][0], description='Stop at for controlnet.')
+    ip_weight: float = Field(
+        default=flags.default_parameters[flags.default_ip][1], description='Weight for controlnet.')
+    ip_type: str = Field(
+        default=flags.default_ip, description=f'Image prompt type. Options are: {flags.ip_list}')
+
+
+class AdvancedOptions(BaseModel):
+    disable_preview: bool = Field(
+        default=False, description='Disable preview during generation.')
+    adm_scaler_positive: float = Field(
+        default=1.5, description='The scaler multiplied to positive ADM (use 1.0 to disable). ')
+    adm_scaler_negative: float = Field(
+        default=0.8, description='The scaler multiplied to negative ADM (use 1.0 to disable). ')
+    adm_scaler_end: float = Field(
+        default=0.3, description='When to end the guidance from positive/negative ADM. ')
+    adaptive_cfg: float = Field(
+        default=modules.config.default_cfg_tsnr, description='Enabling Fooocus\'s implementation of CFG mimicking for TSNR (effective when real CFG > mimicked CFG).')
+    sampler_name: str = Field(
+        default=modules.config.default_sampler, description=f'Sampler. Options are: {flags.sampler_list}')
+    scheduler_name: str = Field(
+        default=modules.config.default_scheduler, description=f'Scheduler. Options are: {flags.scheduler_list}')
+    generate_image_grid: bool = Field(
+        default=False, description='(Experimental) This may cause performance problems on some computers and certain internet conditions.')
+    overwrite_step: int = Field(
+        default=modules.config.default_overwrite_step, description='Forced Overwrite of Sampling Step. Set as -1 to disable. For developer debugging.')
+    overwrite_switch: int = Field(
+        default=modules.config.default_overwrite_switch, description='Forced Overwrite of Refiner Switch Step. Set as -1 to disable. For developer debugging.')
+    overwrite_width: int = Field(
+        default=-1, description='Forced Overwrite of Generating Width. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.')
+    overwrite_height: int = Field(
+        default=-1, description='Forced Overwrite of Generating Height. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.')
+    overwrite_vary_strength: float = Field(
+        default=-1, description='Forced Overwrite of Denoising Strength of "Vary". Set as negative number to disable. For developer debugging.')
+    overwrite_upscale_strength: float = Field(
+        default=-1, description='Forced Overwrite of Denoising Strength of "Upscale". Set as negative number to disable. For developer debugging.')
+    mixing_image_prompt_and_vary_upscale: bool = Field(
+        default=False, description='Mixing Image Prompt and Vary/Upscale')
+    mixing_image_prompt_and_inpaint: bool = Field(
+        default=False, description='Mixing Image Prompt and Inpaint')
+    debugging_cn_preprocessor: bool = Field(
+        default=False, description='Debug Preprocessors')
+    skipping_cn_preprocessor: bool = Field(
+        default=False, description='Skip Preprocessors')
+    controlnet_softness: float = Field(
+        default=0.25, description='Similar to the Control Mode in A1111 (use 0.0 to disable). ')
+    canny_low_threshold: int = Field(
+        default=64, description='Canny Low Threshold')
+    canny_high_threshold: int = Field(
+        default=128, description='Canny High Threshold')
+    refiner_swap_method: str = Field(
+        default='joint', description='Refiner swap method')
+    freeu_enabled: bool = Field(
+        default=False, description='Enabled')
+    freeu_b1: float = Field(
+        default=1.01, description='B1')
+    freeu_b2: float = Field(
+        default=1.02, description='B2')
+    freeu_s1: float = Field(
+        default=0.99, description='S1')
+    freeu_s2: float = Field(
+        default=0.95, description='S2')
+    debugging_inpaint_preprocessor: bool = Field(
+        default=False, description='Debug Inpaint Preprocessing')
+    inpaint_disable_initial_latent: bool = Field(
+        default=False, description='Disable initial latent in inpaint')
+    inpaint_engine: str = Field(
+        default=modules.config.default_inpaint_engine_version, description=f'Inpaint Engine. Options are: {flags.inpaint_engine_versions}')
+    inpaint_strength: float = Field(
+        default=1.0, description='Inpaint Denoising Strength. Same as the denoising strength in A1111 inpaint. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)')
+    inpaint_respective_field: float = Field(
+        default=0.618, description='Inpaint Respective Field. The area to inpaint. Value 0 is same as "Only Masked" in A1111. Value 1 is same as "Whole Image" in A1111. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)')
+
+
+class GenerationOption(BaseModel):
+    prompt: str = Field(description='Prompt for generation.')
+    negative_prompt: str = Field(
+        default=modules.config.default_prompt_negative, description='Negative prompt for generation.')
+    style_selections: list[str] = Field(
+        default=copy.deepcopy(modules.config.default_styles), description=f'Styles for generation. Options are: {copy.deepcopy(style_sorter.all_styles)}')
+    performance_selection: str = Field(
+        default=modules.config.default_performance, description=f'Performance for generation. Options are: {flags.performance_selections}')
+    aspect_ratios_selection: str = Field(
+        default=modules.config.default_aspect_ratio, description=f'width × height. Options are: {modules.config.available_aspect_ratios}')
+    image_number: int = Field(
+        default=modules.config.default_image_number, description='Number of images to generate.')
+    image_seed: int = Field(
+        default=-1, description='Seed for generation. -1 means random.')
+    sharpness: float = Field(
+        default=modules.config.default_sample_sharpness,
+        description='Image Sharpness. Higher value means image and texture are sharper. Min 0.0, Max 30.0.')
+    guidance_scale: float = Field(
+        default=modules.config.default_cfg_scale,
+        description='Guidance Scale. Higher value means style is cleaner, vivider, and more artistic. Min 1.0, Max 30.0.')
+    base_model: str = Field(
+        default=modules.config.default_base_model_name,
+        description=f'Base Model (SDXL only). Options are: {modules.config.model_filenames}')
+    refiner_model: str = Field(
+        default=modules.config.default_refiner_model_name,
+        description=f'Refiner (SDXL or SD 1.5). Options are: {modules.config.model_filenames}')
+    refiner_switch: float = Field(
+        default=modules.config.default_refiner_switch,
+        description='Refiner Switch At. Use 0.4 for SD1.5 realistic models; or 0.667 for SD1.5 anime models; or 0.8 for XL-refiners; or any value for switching two SDXL models. Min 0.1, Max 1.0.')
+    loras: list[LoraConfig] = Field(
+        default=[], description='LoRA configs.')
+    input_image_checkbox: bool = Field(
+        default=False, description='Whether to use input image.')
+    current_tab: str = Field(
+        default='uov', description='Current tab.')
+    uov_method: str = Field(
+        default=flags.disabled, description=f'Upscale or Variation. Options are: {flags.uov_list}')
+    uov_input_image: ImageSource | None = Field(
+        default=None, description='Input image for upscale, variation or image prompt.')
+    outpaint_selections: list[str] = Field(
+        default=[], description="Outpaint directions. 'Left', 'Right', 'Top', 'Bottom'")
+    inpaint_input_image: ImageSource | None = Field(
+        default=None, description='Input image for inpaint.')
+    inpaint_additional_prompt: str = Field(
+        default='', description='Describe what you want to inpaint.')
+    ip_ctrls: list[ControlConfig] = Field(
+        default=[], description='ControlNet configs.')
+    advanced_options: AdvancedOptions = Field(
+        default=AdvancedOptions(), description='Advanced settings for generation.')
+
+
+class FocusTask(BaseModel):
+    task_id: str = Field(description='Task uuid.')
+    status: str = Field(description='Status of the current task.')
+    created_at: datetime = Field(description='Created time of the current task.')
+
+
+class FocusTasks(BaseModel):
+    tasks: list[FocusTask] = Field(default=[], description='Tasks of the current user.')
+
+
+def is_base64_image(img_str: str) -> tuple[bool, str, int | None, int | None, str | None]:
+    """
+    Check if a string is a base64 encoded image and return its dimensions and MIME type.
+
+    :param str s: a string to check
+    :return: tuple (is_image, removed_schema_str, width, height, mime) or (False, img_str, None, None, None) if the string is not a valid image
+    """
+    try:
+        mime = None
+        # Check if the string has the embedded schema and remove it
+        removed_schema_str = img_str
+        if ";base64," in img_str:
+            mime, removed_schema_str = img_str.split(";base64,")
+            mime = mime.split(":")[1] if "data:" in mime else None
+
+        # Decode the base64 string
+        decoded = base64.b64decode(removed_schema_str)
+
+        # Open the image and get its size
+        image = Image.open(io.BytesIO(decoded))
+        width, height = image.size
+
+        # If mime type is not available in the string, guess it using imghdr
+        if mime is None:
+            mime = imghdr.what(None, h=decoded)
+            mime = "image/" + mime if mime else None
+
+        return True, removed_schema_str, width, height, mime
+    except Exception as e:
+        logger.exception(f"Failed to check if the string is a valid image: {e}")
+        return False, img_str, None, None, None
+
+
+async def download_image(
+        session: aiohttp.ClientSession,
+        url: str,
+        output_path: str,
+        headers: dict[str, str] = dict(),
+        append_ext: bool = False) -> tuple[str | None, str | None]:
+    async with session.get(url, headers=headers) as resp:
+        if resp.status == 200:
+            content_type = resp.headers.get("content-type", None)
+            if content_type and content_type.startswith("image/"):
+                data = await resp.read()
+                dirname = os.path.dirname(output_path)
+                if not await aiofiles.os.path.exists(dirname):
+                    await aiofiles.os.makedirs(dirname, exist_ok=True)
+                if append_ext:
+                    ext = mimetypes.guess_extension(content_type)
+                    if ext and (not output_path.endswith(ext)):
+                        output_path = f"{output_path}{ext}"
+                async with aiofiles.open(output_path, mode='wb') as f:
+                    await f.write(data)
+                return output_path, base64.b64encode(data).decode('utf-8')
+        try:
+            resp_message = await resp.text()
+            logger.error(f"Download failed for image {url} with status code {resp.status}: {resp_message}")
+        except:
+            logger.error(f"Download failed for image {url} with status code {resp.status} and cannot process image")
+        return None, None
+
+
+def remove_schema(base64_str: str) -> str:
+    if "base64," in base64_str:
+        base64_str = base64_str.split("base64,")[1]
+    return base64_str
+
+
+async def save_base64_image_to_file(encoded_image: str, output_path: str) -> str:
+    output_dir = os.path.dirname(output_path)
+    if not await aiofiles.os.path.exists(output_dir):
+        await aiofiles.os.makedirs(output_dir, exist_ok=True)
+    decoded_image = base64.b64decode(remove_schema(encoded_image))
+    async with aiofiles.open(output_path, 'wb') as f:
+        await f.write(decoded_image)
+    return output_path
+
+
+async def save_numpy_image_to_file(np_image: np.ndarray, output_path: str, format: str = "JPEG") -> str:
+    output_dir = os.path.dirname(output_path)
+    if not await aiofiles.os.path.exists(output_dir):
+        await aiofiles.os.makedirs(output_dir, exist_ok=True)
+    image = Image.fromarray(np_image)
+    buffer = io.BytesIO()
+    image.save(buffer, format=format)
+    async with aiofiles.open(output_path, 'wb') as f:
+        await f.write(buffer.getvalue())
+    return output_path
+
+
+def get_exception(exception_class: Callable, status_code: int, msg: str) -> WebSocketException | HTTPException:
+    if status_code == 400:
+        if exception_class == WebSocketException:
+            return WebSocketException(code=status.WS_1003_UNSUPPORTED_DATA, reason=msg)
+        else:
+            return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+    if exception_class == WebSocketException:
+        return WebSocketException(code=status_code, reason=msg)
+    else:
+        return HTTPException(status_code=status_code, detail=msg)
+
+
+async def verify_image(
+        session: aiohttp.ClientSession,
+        image: ImageSource,
+        user_id: str,
+        with_schema: bool = False,
+        subdir: str | None = None,
+        exception: Callable = WebSocketException) -> RemoteImageSource:
+    if not image.image_url and not image.encoded_image:
+        raise get_exception(
+            exception,
+            status_code=400,
+            msg="Either image_url or encoded_image must be provided for init_img."
+        )
+    image_name = str(uuid.uuid4())
+    local_image = RemoteImageSource()
+    if subdir:
+        output_path = f"{settings.api_image_dir}/{user_id}/{subdir}/{image_name}"
+    else:
+        output_path = f"{settings.api_image_dir}/{user_id}/{image_name}"
+    if image.image_url and not image.encoded_image:
+        local_image.image_filepath, local_image.encoded_image = await download_image(
+            session,
+            image.image_url,
+            output_path,
+            append_ext=True)
+    if not local_image.encoded_image and not image.encoded_image:
+        raise get_exception(
+            exception,
+            status_code=400,
+            msg=f"Failed to download image from {image.image_url}."
+        )
+    mime = None
+    if image.encoded_image:
+        is_img, image.encoded_image, _, _, mime = is_base64_image(image.encoded_image)
+        if not is_img:
+            raise get_exception(
+                exception,
+                status_code=400,
+                msg="Failed to decode image from encoded_image str."
+            )
+        local_image.encoded_image = image.encoded_image
+        if mime:
+            ext = mimetypes.guess_extension(mime)
+            if ext and (not output_path.endswith(ext)):
+                output_path = f"{output_path}{ext}"
+        local_image.image_filepath = await save_base64_image_to_file(local_image.encoded_image, output_path)
+    if with_schema:
+        if mime is None and local_image.image_filepath:
+            mime, _ = mimetypes.guess_type(local_image.image_filepath)
+        if mime is None:
+            raise get_exception(
+                exception,
+                status_code=400,
+                msg="Failed to detect the mime type of image."
+            )
+        image.encoded_image = f"data:{mime};base64,{image.encoded_image}"
+    return local_image
+
+
+def base64_to_numpy_array(base64_str: str) -> np.ndarray:
+    """
+    Convert a base64 encoded image with a prefix to a NumPy array.
+    """
+    # Find the start of the base64 string
+    base64_str = base64_str.split(',')[-1]
+
+    # Decode the base64 string
+    image_data = base64.b64decode(base64_str)
+
+    # Convert the bytes to a PIL image
+    image = Image.open(io.BytesIO(image_data))
+
+    # Convert the PIL image to a NumPy array
+    numpy_array = np.array(image)
+
+    return numpy_array
+
+
+def numpy_array_to_base64(numpy_array: np.ndarray, format='JPEG', with_schema: bool = False) -> str:
+    """
+    Convert a NumPy array to a base64 encoded image.
+
+    Parameters:
+    - numpy_array: numpy.ndarray
+        The NumPy array to convert.
+    - format: str, optional
+        The format of the image to encode (default is JPEG).
+
+    Returns:
+    - str
+        The base64 encoded string of the image.
+    """
+    # Convert the NumPy array to a PIL image
+    image = Image.fromarray(numpy_array)
+
+    # Save the image to a bytes buffer
+    buffer = io.BytesIO()
+    image.save(buffer, format=format)
+
+    # Get the raw bytes from the buffer
+    image_bytes = buffer.getvalue()
+
+    # Encode the bytes to base64 and return
+    base64_str = base64.b64encode(image_bytes).decode('utf-8')
+
+    if with_schema:
+        return f"data:image/{format.lower()};base64,{base64_str}"
+    return base64_str
+
+
+def convert_advanced_options_to_list(advanced_options: AdvancedOptions) -> list:
+    return [
+        advanced_options.disable_preview,
+        advanced_options.adm_scaler_positive,
+        advanced_options.adm_scaler_negative,
+        advanced_options.adm_scaler_end,
+        advanced_options.adaptive_cfg,
+        advanced_options.sampler_name,
+        advanced_options.scheduler_name,
+        advanced_options.generate_image_grid,
+        advanced_options.overwrite_step,
+        advanced_options.overwrite_switch,
+        advanced_options.overwrite_width,
+        advanced_options.overwrite_height,
+        advanced_options.overwrite_vary_strength,
+        advanced_options.overwrite_upscale_strength,
+        advanced_options.mixing_image_prompt_and_vary_upscale,
+        advanced_options.mixing_image_prompt_and_inpaint,
+        advanced_options.debugging_cn_preprocessor,
+        advanced_options.skipping_cn_preprocessor,
+        advanced_options.controlnet_softness,
+        advanced_options.canny_low_threshold,
+        advanced_options.canny_high_threshold,
+        advanced_options.refiner_swap_method,
+        advanced_options.freeu_enabled,
+        advanced_options.freeu_b1,
+        advanced_options.freeu_b2,
+        advanced_options.freeu_s1,
+        advanced_options.freeu_s2,
+        advanced_options.debugging_inpaint_preprocessor,
+        advanced_options.inpaint_disable_initial_latent,
+        advanced_options.inpaint_engine,
+        advanced_options.inpaint_strength,
+        advanced_options.inpaint_respective_field,
+    ]
+
+
+class GenerationProgress(BaseModel):
+    task_id: str = Field(description='Task uuid.')
+    status: str = Field(description='Status of the current task.')
+    progress: int = Field(default=0, description='Progress of the current task. From 0 ~ 100')
+    message: str = Field(default="", description='Message of the current task.')
+    is_url: bool = Field(default=False, description='Whether the result is a url.')
+    images: list[ImageSource] = Field(default=[], description='Preview or result images')
+    queue_length: int | None = Field(default=None, description='Queue length of the current task.')
+    queue_position: int | None = Field(default=None, description='Queue position of the current task.')
+
+
+def get_user_subdir(user_id: str) -> str:
+    h = hashlib.sha256()
+    h.update(user_id.encode('utf-8'))
+    encoded_user_path = h.hexdigest()
+    # same user data in 4 level folders, to prevent a folder has too many subdir
+    return f"{encoded_user_path[:2]}/{encoded_user_path[2:4]}/{encoded_user_path[4:6]}/{encoded_user_path}"
+
+
+async def process_result_images(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> list[ImageSource]:
+    images = []
+    if progress.status.images:
+        for idx, image in enumerate(progress.status.images):
+            if image is not None:
+                if is_url:
+                    rel_filepath = os.path.join(
+                        "fooocus/outputs/",
+                        get_user_subdir(user_id),
+                        f"{start_time.strftime('%Y-%m-%d')}/{progress.task_id}-{progress.flag}-{progress.status.percentage}-{idx}.jpeg"
+                    )
+                    output_path = f"{settings.api_image_dir}/{rel_filepath}"
+                    output_url = f"{settings.s3_prefix}/{rel_filepath}"
+                    await save_numpy_image_to_file(image, output_path)
+                    images.append(ImageSource(image_url=output_url))
+                else:
+                    images.append(ImageSource(encoded_image=numpy_array_to_base64(image, with_schema=True)))
+    return images
+
+
+def extract_queue_length(progress: Progress) -> tuple[int | None, int | None]:
+    if progress.queuing_status:
+        return progress.queuing_status.position, progress.queuing_status.total
+    return None, None
+
+
+async def extract_progress(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> GenerationProgress:
+    images = await process_result_images(progress, is_url, user_id, start_time)
+    queue_position, queue_length = extract_queue_length(progress)
+    return GenerationProgress(
+        task_id=progress.task_id,
+        status=progress.flag,
+        progress=progress.status.percentage,
+        message=progress.status.title,
+        is_url=is_url,
+        images=images,
+        queue_length=queue_length,
+        queue_position=queue_position
+    )
+
+
+async def update_database(progress: Progress, previous_status: str | None, user_id: str, generation_params: GenerationOption | None = None) -> str:
+    async with get_db() as db:
+        if previous_status is None and generation_params is not None:
+            hostname = socket.gethostname()
+            server_ip = socket.gethostbyname(hostname)
+            await insert_focus_task_record(
+                db, user_id, progress.task_id, progress.flag, generation_params.json(), hostname, server_ip)
+        if previous_status != progress.flag:
+            if progress.flag == "finish":
+                await update_focus_task_record(
+                    db, progress.task_id, progress.flag, json.dumps(progress.status.image_filepaths))
+            else:
+                await update_focus_task_record(
+                    db, progress.task_id, progress.flag)
+    return progress.flag
+
+
+def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable, recover_task: Callable, stop_clicked: Callable, skip_clicked: Callable) -> FastAPI:
+
+    asyncio.run(create_tables())
+
+    async def prepare_args_for_generate(config: GenerationOption, user_id: str) -> list:
+        async with aiohttp.ClientSession() as http_session:
+            lora_ctrls = []
+
+            for i, (n, v) in enumerate(modules.config.default_loras):
+                if i < len(config.loras):
+                    n = config.loras[i].lora_model
+                    v = config.loras[i].lora_weight
+                else:
+                    lora_ctrls += [n, v]
+
+            ip_ctrls = []
+            for i in range(4):
+                if i < len(config.ip_ctrls):
+                    image = config.ip_ctrls[i].ip_image
+                    if image:
+                        image_source = await verify_image(http_session, image, user_id, subdir="fooocus/inputs")
+                        if image_source.encoded_image:
+                            image_np = base64_to_numpy_array(image_source.encoded_image)
+                            ip_ctrls += [image_np, config.ip_ctrls[i].ip_stop, config.ip_ctrls[i].ip_weight, config.ip_ctrls[i].ip_type]
+                            continue
+                default_end, default_weight = flags.default_parameters[flags.default_ip]
+                ip_ctrls += [None, default_end, default_weight, flags.default_ip]
+
+            uov_input_image = None
+            if config.uov_input_image:
+                uov_input_image_source = await verify_image(http_session, config.uov_input_image, user_id, subdir="fooocus/inputs")
+                if uov_input_image_source.encoded_image:
+                    uov_input_image = base64_to_numpy_array(uov_input_image_source.encoded_image)
+
+            inpaint_input_image = None
+            if config.inpaint_input_image:
+                inpaint_input_image_source = await verify_image(http_session, config.inpaint_input_image, user_id, subdir="fooocus/inputs")
+                if inpaint_input_image_source.encoded_image:
+                    inpaint_input_image = base64_to_numpy_array(inpaint_input_image_source.encoded_image)
+
+            if config.image_seed < 0:
+                image_seed = refresh_seed(True, config.image_seed)
+            else:
+                image_seed = refresh_seed(False, config.image_seed)
+
+            ctrls = [
+                config.prompt,
+                config.negative_prompt,
+                config.style_selections,
+                config.performance_selection,
+                config.aspect_ratios_selection,
+                config.image_number,
+                image_seed,
+                config.sharpness,
+                config.guidance_scale
+            ]
+
+            ctrls += [config.base_model, config.refiner_model, config.refiner_switch] + lora_ctrls
+            ctrls += [config.input_image_checkbox, config.current_tab]
+            ctrls += [config.uov_method, uov_input_image]
+            ctrls += [config.outpaint_selections, inpaint_input_image, config.inpaint_additional_prompt]
+            ctrls += ip_ctrls
+            return ctrls
+
+    @app.websocket('/api/ws/generate')
+    async def generate_image_socket(
+            websocket: WebSocket, task_id: str | None = None, is_url: bool = False, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Could not identify user.")
+        start_time = datetime.now(timezone.utc)
+        await websocket.accept()
+        previous_status = None
+        try:
+            if task_id:
+                async for progress in recover_task(task_id):
+                    previous_status = await update_database(progress, previous_status, user_id)
+                    generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                    await websocket.send_json(generate_progress.dict())
+            else:
+                data = await websocket.receive_text()
+                generation_option = GenerationOption(**json.loads(data))
+                advanced_parameters.set_all_advanced_parameters(*convert_advanced_options_to_list(generation_option.advanced_options))
+                args = await prepare_args_for_generate(generation_option, user_id)
+                async for progress in generate_clicked(*args):
+                    previous_status = await update_database(progress, previous_status, user_id, generation_option)
+                    generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                    await websocket.send_json(generate_progress.dict())
+        except WebSocketDisconnect:
+            print("Client disconnected")
+        finally:
+            await websocket.close()
+
+    @app.post('/api/focus/stop', response_class=JSONResponse)
+    async def stop_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        task_stopped = await stop_clicked(task_id)
+        if task_stopped:
+            return {"status": "success"}
+        return {"status": "failed"}
+
+
+    @app.post('/api/focus/skip', response_class=JSONResponse)
+    async def skip_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        task_skipped = await skip_clicked(task_id)
+        if task_skipped:
+            return {"status": "success"}
+        return {"status": "failed"}
+
+
+    @app.get('/api/focus/task_records', response_model=FocusTasks, response_class=JSONResponse)
+    async def get_focus_task_record_for_status(task_status: str, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        async with get_db() as db:
+            records = await query_focus_task_record_with_status(db, user_id, task_status)
+            records_response = FocusTasks(tasks=[FocusTask(
+                task_id=record.task_id, status=record.status, created_at=record.created_at) for record in records])
+            return records_response
+
+
+    return app
