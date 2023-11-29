@@ -4,6 +4,7 @@ import os
 import json
 import time
 import shared
+from datetime import datetime, timedelta
 import modules.config
 import fooocus_version
 import modules.html
@@ -16,15 +17,23 @@ import modules.style_sorter as style_sorter
 import modules.meta_parser
 import args_manager
 import copy
+import logging
+import uuid
+import asyncio
 
 from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
 from modules.auth import auth_enabled, check_auth
 
+from api import settings, Status, QueuingStatus, Progress, create_api
 
-def generate_clicked(*args):
+logger = logging.getLogger("uvicorn.error")
+
+
+async def generate_clicked(*args):
     import ldm_patched.modules.model_management as model_management
+    task_id = str(uuid.uuid4())
 
     with model_management.interrupt_processing_mutex:
         model_management.interrupt_processing = False
@@ -32,19 +41,37 @@ def generate_clicked(*args):
     # outputs=[progress_html, progress_window, progress_gallery, gallery]
 
     execution_start_time = time.perf_counter()
-    task = worker.AsyncTask(args=list(args))
+    task = worker.AsyncTask(task_id=task_id, args=list(args))
     finished = False
 
-    yield gr.update(visible=True, value=modules.html.make_progress_html(1, 'Waiting for task to start ...')), \
-        gr.update(visible=True, value=None), \
-        gr.update(visible=False, value=None), \
-        gr.update(visible=False)
+    yield Progress(flag='preparing', task_id=task_id, status=Status(percentage=1, title='Waiting for task to start ...', images=[]))
 
     worker.async_tasks.append(task)
 
+    started = False
+    last_update_time = datetime.now()
     while not finished:
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
+        if not started:
+            current_time = datetime.now()
+            if (current_time - last_update_time) >= timedelta(seconds=1):
+                last_update_time = current_time
+                queue_status = QueuingStatus()
+                for idx, task in enumerate(worker.async_tasks):
+                    if task.task_id == task_id:
+                        queue_status.position = idx + 1
+                        queue_status.total = len(worker.async_tasks)
+                        break
+                if queue_status.position > 0:
+                    yield Progress(
+                        flag='queueing',
+                        task_id=task_id,
+                        status=Status(percentage=1, title=f'Waiting in the queue {queue_status.position}/{queue_status.total}', images=[]),
+                        queuing_status=queue_status)
+                else:
+                    started = True
         if len(task.yields) > 0:
+            started = True
             flag, product = task.yields.pop(0)
             if flag == 'preview':
 
@@ -54,25 +81,213 @@ def generate_clicked(*args):
                         # print('Skipped one preview for better internet connection.')
                         continue
 
+                current_time = datetime.now()
+                if (current_time - last_update_time) < timedelta(seconds=0.2):
+                    continue
+                last_update_time = current_time
                 percentage, title, image = product
-                yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
-                    gr.update(visible=True, value=image) if image is not None else gr.update(), \
-                    gr.update(), \
-                    gr.update(visible=False)
+                yield Progress(
+                    flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
             if flag == 'results':
-                yield gr.update(visible=True), \
-                    gr.update(visible=True), \
-                    gr.update(visible=True, value=product), \
-                    gr.update(visible=False)
+                yield Progress(
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product))
             if flag == 'finish':
-                yield gr.update(visible=False), \
-                    gr.update(visible=False), \
-                    gr.update(visible=False), \
-                    gr.update(visible=True, value=product)
+                yield Progress(
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product))
                 finished = True
+            if flag == 'skipped':
+                percentage, title = product
+                yield Progress(
+                    flag='skipped', task_id=task_id, status=Status(percentage=percentage, title=title, images=[]))
+            if flag == 'stopped':
+                yield Progress(
+                    flag='stopped', task_id=task_id, status=Status(percentage=100, title=product, images=[]))
 
     execution_time = time.perf_counter() - execution_start_time
     print(f'Total time: {execution_time:.2f} seconds')
+    return
+
+
+async def recover_task(task_id: str):
+    import ldm_patched.modules.model_management as model_management
+
+    with model_management.interrupt_processing_mutex:
+        model_management.interrupt_processing = False
+
+    execution_start_time = time.perf_counter()
+    task = None
+    finished = False
+    started = False
+
+    for finished_task in worker.finished_tasks:
+        if finished_task.task_id == task_id:
+            task = finished_task
+            break
+    for stopped_task in worker.stop_or_skipped_tasks:
+        if stopped_task.task_id == task_id:
+            task = stopped_task
+            break
+    if task:
+        finished = True
+        task.yields = []
+        yield Progress(
+            flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=task.results))
+
+    if worker.running_task and worker.running_task.task_id == task_id:
+        started = True
+        task = worker.running_task
+
+    for waiting_task in worker.async_tasks:
+        if waiting_task.task_id == task_id:
+            task = waiting_task
+            break
+
+    if task is None:
+        yield Progress(
+            flag='unfound', task_id=task_id, status=Status(percentage=0, title=f'Task {task_id} could not be found', images=[]))
+        execution_time = time.perf_counter() - execution_start_time
+        print(f'Total time: {execution_time:.2f} seconds')
+        return
+
+    last_update_time = datetime.now()
+    while not finished:
+        await asyncio.sleep(0.01)
+        if not started:
+            current_time = datetime.now()
+            if (current_time - last_update_time) >= timedelta(seconds=1):
+                last_update_time = current_time
+                queue_status = QueuingStatus()
+                for idx, task in enumerate(worker.async_tasks):
+                    if task.task_id == task_id:
+                        queue_status.position = idx + 1
+                        queue_status.total = len(worker.async_tasks)
+                        break
+                if queue_status.position > 0:
+                    yield Progress(
+                        flag='queueing',
+                        task_id=task_id,
+                        status=Status(percentage=1, title=f'Waiting in the queue {queue_status.position}/{queue_status.total}', images=[]),
+                        queuing_status=queue_status)
+                else:
+                    started = True
+        if len(task.yields) > 0:
+            started = True
+            flag, product = task.yields.pop(0)
+            if flag == 'preview':
+
+                # help bad internet connection by skipping duplicated preview
+                if len(task.yields) > 0:  # if we have the next item
+                    if task.yields[0][0] == 'preview':   # if the next item is also a preview
+                        # print('Skipped one preview for better internet connection.')
+                        continue
+
+                current_time = datetime.now()
+                if (current_time - last_update_time) < timedelta(seconds=0.2):
+                    continue
+                last_update_time = current_time
+                percentage, title, image = product
+                yield Progress(
+                    flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
+            if flag == 'results':
+                yield Progress(
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product))
+            if flag == 'finish':
+                yield Progress(
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product))
+                finished = True
+            if flag == 'skipped':
+                percentage, title = product
+                yield Progress(
+                    flag='skipped', task_id=task_id, status=Status(percentage=percentage, title=title, images=[]))
+            if flag == 'stopped':
+                yield Progress(
+                    flag='stopped', task_id=task_id, status=Status(percentage=100, title=product, images=[]))
+
+    execution_time = time.perf_counter() - execution_start_time
+    print(f'Total time: {execution_time:.2f} seconds')
+    return
+
+
+async def generate_clicked_gradio(*args):
+    async for progress in generate_clicked(*args):
+        if progress.flag == "preparing":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(
+                    visible=True,
+                    value=modules.html.make_progress_html(
+                        progress.status.percentage, progress.status.title
+                    ),
+                ),
+                gr.update(visible=True, value=None),
+                gr.update(visible=False, value=None),
+                gr.update(visible=False),
+            )
+        elif progress.flag == "queueing":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(
+                    visible=True,
+                    value=modules.html.make_progress_html(
+                        progress.status.percentage, progress.status.title
+                    ),
+                ),
+                gr.update(visible=True, value=None),
+                gr.update(visible=False, value=None),
+                gr.update(visible=False),
+            )
+        elif progress.flag == "preview":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(
+                    visible=True,
+                    value=modules.html.make_progress_html(
+                        progress.status.percentage, progress.status.title
+                    ),
+                ),
+                gr.update(visible=True, value=progress.status.images[0])
+                if len(progress.status.images) > 0
+                else gr.update(),
+                gr.update(),
+                gr.update(visible=False),
+            )
+        elif progress.flag == "skipped":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(
+                    visible=True,
+                    value=modules.html.make_progress_html(
+                        progress.status.percentage, progress.status.title
+                    ),
+                ),
+                gr.update(),
+                gr.update(),
+                gr.update(visible=False),
+            )
+        elif progress.flag == "results":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(visible=True),
+                gr.update(visible=True),
+                gr.update(visible=True, value=progress.status.images),
+                gr.update(visible=False),
+            )
+        elif progress.flag == "stopped":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(),
+            )
+        elif progress.flag == "finish":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=True, value=progress.status.images),
+            )
     return
 
 
@@ -87,9 +302,64 @@ shared.gradio_root = gr.Blocks(
     title=title,
     css=modules.html.css).queue()
 
+def stop_clicked(task_id: str):
+    if worker.running_task and worker.running_task.task_id == task_id:
+        import ldm_patched.modules.model_management as model_management
+        shared.last_stop = 'stop'
+        model_management.interrupt_current_processing()
+        return True
+    task = None
+    for task in worker.async_tasks:
+        if task.task_id == task_id:
+            break
+    if task:
+        try:
+            worker.async_tasks.remove(task)
+            worker.stop_or_skipped_tasks.append(task)
+            task.yields.append(['stopped', "User stopped"])
+            task.yields.append(['finish', []])
+        except ValueError:
+            return False
+        return True
+    for task in worker.finished_tasks:
+        if task.task_id == task_id:
+            return True
+    for task in worker.stop_or_skipped_tasks:
+        if task.task_id == task_id:
+            return True
+    return False
+
+def skip_clicked(task_id: str):
+    if worker.running_task and worker.running_task.task_id == task_id:
+        import ldm_patched.modules.model_management as model_management
+        shared.last_stop = 'skip'
+        model_management.interrupt_current_processing()
+        return True
+    task = None
+    for task in worker.async_tasks:
+        if task.task_id == task_id:
+            break
+    if task:
+        try:
+            worker.async_tasks.remove(task)
+            worker.stop_or_skipped_tasks.append(task)
+            task.yields.append(['skipped', (0, "User skipped")])
+            task.yields.append(['finish', []])
+        except ValueError:
+            return False
+        return True
+    for task in worker.finished_tasks:
+        if task.task_id == task_id:
+            return True
+    for task in worker.stop_or_skipped_tasks:
+        if task.task_id == task_id:
+            return True
+    return False
+
 with shared.gradio_root:
     with gr.Row():
         with gr.Column(scale=2):
+            task_id = gr.Textbox(label='Task ID', value='', visible=False, elem_id='task_id')
             with gr.Row():
                 progress_window = grh.Image(label='Preview', show_label=True, visible=False, height=768,
                                             elem_classes=['main_view'])
@@ -115,21 +385,17 @@ with shared.gradio_root:
                     skip_button = gr.Button(label="Skip", value="Skip", elem_classes='type_row_half', visible=False)
                     stop_button = gr.Button(label="Stop", value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
 
-                    def stop_clicked():
-                        import ldm_patched.modules.model_management as model_management
-                        shared.last_stop = 'stop'
-                        model_management.interrupt_current_processing()
+                    def stop_clicked_gradio(task_id):
+                        stop_clicked(task_id)
                         return [gr.update(interactive=False)] * 2
 
-                    def skip_clicked():
-                        import ldm_patched.modules.model_management as model_management
-                        shared.last_stop = 'skip'
-                        model_management.interrupt_current_processing()
+                    def skip_clicked_gradio(task_id):
+                        skip_clicked(task_id)
                         return
 
-                    stop_button.click(stop_clicked, outputs=[skip_button, stop_button],
+                    stop_button.click(stop_clicked_gradio, inputs=[task_id], outputs=[skip_button, stop_button],
                                       queue=False, show_progress=False, _js='cancelGenerateForever')
-                    skip_button.click(skip_clicked, queue=False, show_progress=False)
+                    skip_button.click(skip_clicked_gradio, inputs=[task_id], queue=False, show_progress=False)
             with gr.Row(elem_classes='advanced_check_row'):
                 input_image_checkbox = gr.Checkbox(label='Input Image', value=False, container=False, elem_classes='min_check')
                 advanced_checkbox = gr.Checkbox(label='Advanced', value=modules.config.default_advanced_checkbox, container=False, elem_classes='min_check')
@@ -583,7 +849,7 @@ with shared.gradio_root:
                               outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
             .then(advanced_parameters.set_all_advanced_parameters, inputs=adps) \
-            .then(fn=generate_clicked, inputs=ctrls, outputs=[progress_html, progress_window, progress_gallery, gallery]) \
+            .then(fn=generate_clicked_gradio, inputs=ctrls, outputs=[task_id, progress_html, progress_window, progress_gallery, gallery]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
             .then(fn=lambda: None, _js='playNotification').then(fn=lambda: None, _js='refresh_grid_delayed')
@@ -613,11 +879,32 @@ def dump_default_english_config():
 
 # dump_default_english_config()
 
-shared.gradio_root.launch(
+app, _, _ = shared.gradio_root.launch(
     inbrowser=args_manager.args.in_browser,
     server_name=args_manager.args.listen,
     server_port=args_manager.args.port,
     share=args_manager.args.share,
     auth=check_auth if args_manager.args.share and auth_enabled else None,
-    blocked_paths=[constants.AUTH_FILENAME]
+    blocked_paths=[constants.AUTH_FILENAME],
+    prevent_thread_lock=True,
+    app_kwargs={
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+    },
 )
+
+app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked)
+
+
+async def block_thread():
+    logger.info("Starting the async loop and waiting on server")
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except (KeyboardInterrupt, OSError):
+        logger.info("Keyboard interruption in main thread... closing server.")
+        if shared.gradio_root:
+            shared.gradio_root.close()
+
+
+asyncio.run(block_thread())
