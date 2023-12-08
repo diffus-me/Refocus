@@ -97,3 +97,98 @@ async def query_focus_task_record_with_status(
     query_result = await session.execute(statement)
     records = query_result.scalars().all()
     return list(records)
+
+
+class ImageLike(Base):
+    __tablename__ = "image_likes"
+
+    id = mapped_column(Integer, primary_key=True, nullable=False, unique=True, autoincrement=True)
+    user_id = mapped_column(String(64), index=True, nullable=False)
+    image_id = mapped_column(String(512), index=True, nullable=False)
+    created_at = mapped_column(DateTime(), server_default=func.now(), nullable=False)
+
+
+async def like_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageLike:
+    record = ImageLike(user_id=user_id, image_id=image_id)
+    session.add(record)
+    await session.commit()
+    return record
+
+
+async def unlike_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageLike | None:
+    statement = select(ImageLike).where(ImageLike.user_id == user_id, ImageLike.image_id == image_id).limit(1)
+    query_result = await session.execute(statement)
+    record = query_result.scalar_one_or_none()
+    if record:
+        await session.delete(record)
+        await session.commit()
+        return record
+    return None
+
+
+async def count_likes_of_an_image(session: AsyncSession, image_id: str) -> int:
+    statement = select(func.count(ImageLike.id)).where(ImageLike.image_id == image_id)
+    query_result = await session.execute(statement)
+    count = query_result.scalar_one()
+    return count
+
+
+class ImageFavorite(Base):
+    __tablename__ = "image_favorites"
+
+    id = mapped_column(Integer, primary_key=True, nullable=False, unique=True, autoincrement=True)
+    user_id = mapped_column(String(64), index=True, nullable=False)
+    image_id = mapped_column(String(512), index=True, nullable=False)
+    created_at = mapped_column(DateTime(), server_default=func.now(), nullable=False)
+
+
+async def favorite_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageFavorite:
+    record = ImageFavorite(user_id=user_id, image_id=image_id)
+    session.add(record)
+    await session.commit()
+    return record
+
+
+async def unfavorite_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageFavorite | None:
+    statement = select(ImageFavorite).where(ImageFavorite.user_id == user_id, ImageFavorite.image_id == image_id).limit(1)
+    query_result = await session.execute(statement)
+    record = query_result.scalar_one_or_none()
+    if record:
+        await session.delete(record)
+        await session.commit()
+        return record
+    return None
+
+
+async def list_all_favorite_images_of_a_user(session: AsyncSession, user_id: str) -> list[ImageFavorite]:
+    statement = select(ImageFavorite).where(ImageFavorite.user_id == user_id).order_by(ImageFavorite.created_at.desc())
+    query_result = await session.execute(statement)
+    records = query_result.scalars().all()
+    return list(records)
+
+
+class ImageShare(Base):
+    __tablename__ = "image_shares"
+
+    id = mapped_column(Integer, primary_key=True, nullable=False, unique=True, autoincrement=True)
+    user_id = mapped_column(String(64), index=True, nullable=False)
+    image_id = mapped_column(String(512), index=True, nullable=False)
+    created_at = mapped_column(DateTime(), server_default=func.now(), nullable=False)
+
+
+async def share_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageShare:
+    record = ImageShare(user_id=user_id, image_id=image_id)
+    session.add(record)
+    await session.commit()
+    return record
+
+
+async def unshare_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageShare | None:
+    statement = select(ImageShare).where(ImageShare.user_id == user_id, ImageShare.image_id == image_id).limit(1)
+    query_result = await session.execute(statement)
+    record = query_result.scalar_one_or_none()
+    if record:
+        await session.delete(record)
+        await session.commit()
+        return record
+    return None
