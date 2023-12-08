@@ -6,7 +6,6 @@ import base64
 import io
 import mimetypes
 import imghdr
-import asyncio
 import aiohttp
 import aiofiles
 import aiofiles.os
@@ -15,13 +14,16 @@ import copy
 import socket
 
 from datetime import datetime, timezone
-
-from fastapi import FastAPI, WebSocket, Header, HTTPException, WebSocketDisconnect, WebSocketException, status
-from fastapi.responses import JSONResponse
 from typing import Annotated, Callable
 from PIL import Image
 import numpy as np
+from urllib.parse import urlparse
+
 from pydantic import BaseModel, Field, BaseSettings
+
+from fastapi import FastAPI, Request, WebSocket, Header, HTTPException, WebSocketDisconnect, WebSocketException, status
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
 import modules.config
 import modules.flags as flags
@@ -32,13 +34,21 @@ from modules.database import (
     get_db,
     insert_focus_task_record,
     update_focus_task_record,
-    query_focus_task_record_with_status
+    query_focus_task_record_with_status,
+    like_an_image,
+    unlike_an_image,
+    favorite_an_image,
+    unfavorite_an_image,
+    share_an_image,
+    unshare_an_image,
 )
 
 
 class Settings(BaseSettings):
     api_image_dir: str = "/api-outputs"
     s3_prefix: str = ""
+    hostname: str = ""
+    output_base_dir: str = ""
 
 
     class Config:
@@ -46,6 +56,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+database_created = False
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -86,6 +97,10 @@ class ImageSource(BaseModel):
     encoded_image: str | None = Field(default=None, description=(
         "Base64 encoded image. "
         "If both image_url and encoded_image are provided, encoded_image will be used."))
+
+
+class ImageResult(ImageSource):
+    image_id: str = Field(description='Image id.')
 
 
 class RemoteImageSource(ImageSource):
@@ -229,6 +244,48 @@ class FocusTask(BaseModel):
 
 class FocusTasks(BaseModel):
     tasks: list[FocusTask] = Field(default=[], description='Tasks of the current user.')
+
+
+class OptionList(BaseModel):
+    options: list[str] = Field(default=[], description='Options for the field.')
+    default: str | None = Field(default=None, description='Default value for the field.')
+    default_list: list[str] = Field(default=[], description='Default value list for the field.')
+
+
+class DefaultOptions(BaseModel):
+    hostname: str = Field(description='Base url of the websocket.')
+    performances: OptionList = Field(description='Performance options.')
+    aspect_ratios: OptionList = Field(description='Aspect ratio options.')
+    styles: OptionList = Field(description='Style options.')
+    base_models: OptionList = Field(description='Avaialable SD checkpoints.')
+    refiner_models: OptionList = Field(description='Avaialable refiners.')
+    first_lora_name: OptionList = Field(description='First Lora Name.')
+    first_lora_weight: float = Field(description='First Lora Weight.')
+    num_loras: int = Field(description='Number of Loras.')
+    uovs: OptionList = Field(description='Upscale or variation options.')
+
+
+class Like(BaseModel):
+    image_id: str = Field(description='Image id.')
+    like: bool = Field(description='Like or unlike the image.')
+
+
+class Favorite(BaseModel):
+    image_id: str = Field(description='Image id.')
+    favorite: bool = Field(description='Favorite or unfavorite the image.')
+
+
+class Share(BaseModel):
+    image_id: str = Field(description='Image id.')
+    share: bool = Field(description='Share or unshare the image.')
+
+
+def encode_filepath_with_base64(filepath: str) -> str:
+    return base64.b64encode(filepath.encode('utf-8')).decode('utf-8')
+
+
+def decode_filepath_from_base64(encoded_filepath: str) -> str:
+    return base64.b64decode(encoded_filepath.encode('utf-8')).decode('utf-8')
 
 
 def is_base64_image(img_str: str) -> tuple[bool, str, int | None, int | None, str | None]:
@@ -486,7 +543,7 @@ class GenerationProgress(BaseModel):
     progress: int = Field(default=0, description='Progress of the current task. From 0 ~ 100')
     message: str = Field(default="", description='Message of the current task.')
     is_url: bool = Field(default=False, description='Whether the result is a url.')
-    images: list[ImageSource] = Field(default=[], description='Preview or result images')
+    images: list[ImageResult] = Field(default=[], description='Preview or result images')
     queue_length: int | None = Field(default=None, description='Queue length of the current task.')
     queue_position: int | None = Field(default=None, description='Queue position of the current task.')
 
@@ -499,11 +556,14 @@ def get_user_subdir(user_id: str) -> str:
     return f"{encoded_user_path[:2]}/{encoded_user_path[2:4]}/{encoded_user_path[4:6]}/{encoded_user_path}"
 
 
-async def process_result_images(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> list[ImageSource]:
+async def process_result_images(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> list[ImageResult]:
     images = []
     if progress.status.images:
         for idx, image in enumerate(progress.status.images):
             if image is not None:
+                image_id = ""
+                if len(progress.status.image_filepaths) == len(progress.status.images):
+                    image_id = encode_filepath_with_base64(progress.status.image_filepaths[idx])
                 if is_url:
                     rel_filepath = os.path.join(
                         "fooocus/outputs/",
@@ -513,9 +573,9 @@ async def process_result_images(progress: Progress, is_url: bool, user_id: str, 
                     output_path = f"{settings.api_image_dir}/{rel_filepath}"
                     output_url = f"{settings.s3_prefix}/{rel_filepath}"
                     await save_numpy_image_to_file(image, output_path)
-                    images.append(ImageSource(image_url=output_url))
+                    images.append(ImageResult(image_url=output_url, image_id=image_id))
                 else:
-                    images.append(ImageSource(encoded_image=numpy_array_to_base64(image, with_schema=True)))
+                    images.append(ImageResult(encoded_image=numpy_array_to_base64(image, with_schema=True), image_id=image_id))
     return images
 
 
@@ -557,9 +617,31 @@ async def update_database(progress: Progress, previous_status: str | None, user_
     return progress.flag
 
 
+def get_hostname_and_port_from_url(url: str) -> str:
+    if url:
+        parsed_origin = urlparse(url)
+        hostname = parsed_origin.hostname or ""
+        port = parsed_origin.port or ""
+        return f"{hostname}:{port}" if hostname and port else hostname
+    return ""
+
+
+def get_hostname(request: Request, hostname_from_setting: str) -> str:
+    if hostname_from_setting:
+        return hostname_from_setting
+    hostname = get_hostname_and_port_from_url(request.headers.get("origin", ""))
+    if hostname:
+        return hostname
+    hostname = get_hostname_and_port_from_url(request.headers.get("referer", ""))
+    if hostname:
+        return hostname
+    return ""
+
+
 def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable, recover_task: Callable, stop_clicked: Callable, skip_clicked: Callable) -> FastAPI:
 
-    asyncio.run(create_tables())
+
+    templates = Jinja2Templates(directory="templates", autoescape=False, auto_reload=True)
 
     async def prepare_args_for_generate(config: GenerationOption, user_id: str) -> list:
         async with aiohttp.ClientSession() as http_session:
@@ -569,8 +651,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 if i < len(config.loras):
                     n = config.loras[i].lora_model
                     v = config.loras[i].lora_weight
-                else:
-                    lora_ctrls += [n, v]
+                lora_ctrls += [n, v]
 
             ip_ctrls = []
             for i in range(4):
@@ -621,7 +702,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             ctrls += ip_ctrls
             return ctrls
 
-    @app.websocket('/api/ws/generate')
+    @app.websocket('/api/focus/ws/generate')
     async def generate_image_socket(
             websocket: WebSocket, task_id: str | None = None, is_url: bool = False, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
@@ -629,6 +710,9 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
         start_time = datetime.now(timezone.utc)
         await websocket.accept()
         previous_status = None
+        output_dir = None
+        if user_id != "local" and settings.output_base_dir:
+            output_dir = os.path.join(settings.output_base_dir, get_user_subdir(user_id), "outputs", "focus")
         try:
             if task_id:
                 async for progress in recover_task(task_id):
@@ -640,7 +724,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 generation_option = GenerationOption(**json.loads(data))
                 advanced_parameters.set_all_advanced_parameters(*convert_advanced_options_to_list(generation_option.advanced_options))
                 args = await prepare_args_for_generate(generation_option, user_id)
-                async for progress in generate_clicked(*args):
+                async for progress in generate_clicked(*args, base_dir=output_dir):
                     previous_status = await update_database(progress, previous_status, user_id, generation_option)
                     generate_progress = await extract_progress(progress, is_url, user_id, start_time)
                     await websocket.send_json(generate_progress.dict())
@@ -653,7 +737,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
     async def stop_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
-        task_stopped = await stop_clicked(task_id)
+        task_stopped = stop_clicked(task_id)
         if task_stopped:
             return {"status": "success"}
         return {"status": "failed"}
@@ -663,7 +747,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
     async def skip_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
-        task_skipped = await skip_clicked(task_id)
+        task_skipped = skip_clicked(task_id)
         if task_skipped:
             return {"status": "success"}
         return {"status": "failed"}
@@ -678,6 +762,79 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             records_response = FocusTasks(tasks=[FocusTask(
                 task_id=record.task_id, status=record.status, created_at=record.created_at) for record in records])
             return records_response
+
+    @app.get('/api/focus/default_options', response_model=DefaultOptions, response_class=JSONResponse)
+    async def get_default_options(request: Request, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        return DefaultOptions(
+            hostname=get_hostname(request, settings.hostname),
+            performances=OptionList(default=modules.config.default_performance, options=flags.performance_selections),
+            aspect_ratios=OptionList(default=modules.config.default_simplified_aspect_ratio, options=modules.config.available_simplified_aspect_ratios),
+            styles=OptionList(default_list=list(modules.config.default_styles), options=copy.deepcopy(style_sorter.all_styles)),
+            base_models=OptionList(default=modules.config.default_base_model_name, options=modules.config.model_filenames),
+            refiner_models=OptionList(default=modules.config.default_refiner_model_name, options=modules.config.model_filenames),
+            first_lora_name=OptionList(default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames),
+            first_lora_weight=modules.config.default_loras[0][1],
+            num_loras=len(modules.config.default_loras),
+            uovs=OptionList(default=flags.disabled, options=flags.uov_list)
+        )
+
+
+    @app.post('/api/focus/like', response_class=JSONResponse)
+    async def like_or_unlike_an_image(like: Like, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        async with get_db() as db:
+            if like.like:
+                await like_an_image(db, user_id, like.image_id)
+            else:
+                await unlike_an_image(db, user_id, like.image_id)
+            return {
+                "success": True,
+                "liked": like.like,
+            }
+
+
+    @app.post('/api/focus/favorite', response_class=JSONResponse)
+    async def favorite_or_unfavorite_an_image(favorite: Favorite, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        async with get_db() as db:
+            if favorite.favorite:
+                await favorite_an_image(db, user_id, favorite.image_id)
+            else:
+                await unfavorite_an_image(db, user_id, favorite.image_id)
+            return {
+                "success": True,
+                "favorited": favorite.favorite,
+            }
+
+
+    @app.post('/api/focus/share', response_class=JSONResponse)
+    async def share_or_unshare_an_image(share: Share, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        async with get_db() as db:
+            if share.share:
+                await share_an_image(db, user_id, share.image_id)
+            else:
+                await unshare_an_image(db, user_id, share.image_id)
+            return {
+                "success": True,
+                "shared": share.share,
+            }
+
+
+    @app.get('/ui', response_class=HTMLResponse)
+    async def vue_ui(request: Request):
+        global database_created
+        if not database_created:
+            await create_tables()
+            database_created = True
+        return templates.TemplateResponse(
+            "ui.html",
+            {"request": request})
 
 
     return app

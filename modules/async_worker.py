@@ -2,11 +2,13 @@ import threading
 
 
 class AsyncTask:
-    def __init__(self, task_id, args):
+    def __init__(self, task_id, args, base_dir: str | None = None):
         self.task_id = task_id
         self.args = args
         self.yields = []
         self.results = []
+        self.result_paths = []
+        self.base_dir: str | None = base_dir
 
 
 async_tasks: list[AsyncTask] = []
@@ -62,11 +64,16 @@ def worker():
         print(f'[Fooocus] {text}')
         async_task.yields.append(['preview', (number, text, None)])
 
-    def yield_result(async_task, imgs, do_not_show_finished_images=False):
+    def yield_result(async_task, imgs, do_not_show_finished_images=False, img_paths: str | list | None = None):
         if not isinstance(imgs, list):
             imgs = [imgs]
 
         async_task.results = async_task.results + imgs
+
+        if img_paths is not None:
+            if not isinstance(img_paths, list):
+                img_paths = [img_paths]
+            async_task.result_paths = async_task.result_paths + img_paths
 
         if do_not_show_finished_images:
             return
@@ -500,8 +507,8 @@ def worker():
 
             if direct_return:
                 d = [('Upscale (Fast)', '2x')]
-                log(uov_input_image, d)
-                yield_result(async_task, uov_input_image, do_not_show_finished_images=True)
+                logged_image_path = log(uov_input_image, d, base_dir=async_task.base_dir)
+                yield_result(async_task, uov_input_image, do_not_show_finished_images=True, img_paths=logged_image_path)
                 return
 
             tiled = True
@@ -763,6 +770,7 @@ def worker():
                 if inpaint_worker.current_task is not None:
                     imgs = [inpaint_worker.current_task.post_process(x) for x in imgs]
 
+                img_paths = []
                 for x in imgs:
                     d = [
                         ('Prompt', task['log_positive_prompt']),
@@ -788,9 +796,10 @@ def worker():
                         if n != 'None':
                             d.append((f'LoRA {li + 1}', f'{n} : {w}'))
                     d.append(('Version', 'v' + fooocus_version.version))
-                    log(x, d)
+                    logged_image_path = log(x, d, base_dir=async_task.base_dir)
+                    img_paths.append(logged_image_path)
 
-                yield_result(async_task, imgs, do_not_show_finished_images=len(tasks) == 1)
+                yield_result(async_task, imgs, do_not_show_finished_images=len(tasks) == 1, img_paths=img_paths)
             except ldm_patched.modules.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')
