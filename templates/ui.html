@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fooocus - VUE</title>
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.4.8/dist/vuetify.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@5.8.55/css/materialdesignicons.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Material+Icons">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.4.8/dist/vuetify.min.js"></script>
+    <style>
+      .hero-image {
+        width: 100%;
+        height: auto;
+      }
+
+      .generated-image {
+        cursor: pointer;
+      }
+
+      .preview-image {
+        min-width: 500px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <v-container>
+        <v-row class="d-flex flex-row align-end pa-3">
+          <div class="d-flex text-h1 font-weight-bold">imagine</div>
+          <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
+        </v-row>
+        <v-row>
+          <v-col
+            xxl="9"
+            xl="9"
+            lg="9"
+            md="9"
+            sm="12"
+            cols="12"
+          >
+            <v-textarea
+              v-model="prompt"
+              clearable
+              variant="solo-filled"
+              rows="1"
+              auto-grow
+              placeholder="Describe what you want to see..."
+              min-height="56px"
+            ></v-textarea>
+          </v-col>
+          <v-col
+            xxl="3"
+            xl="3"
+            lg="3"
+            md="3"
+            sm="12"
+            cols="12"
+          >
+            <v-btn v-if="!generating" @click="startToGenerate" width="100%" height="56px" color="#5a3cff">Generate</v-btn>
+            <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
+            <v-col class="d-flex pa-0 mr-1">
+              <v-btn @click="skipGeneration" :loading="skipLoading" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
+            </v-col>
+            <v-col class="d-flex pa-0 ml-1">
+              <v-btn @click="stopGeneration" :loading="stopLoading" width="100%" height="56px" color="red-lighten-1">Stop</v-btn>
+            </v-col>
+            </v-row>
+          </v-col>
+        </v-row>
+
+        <div class="mb-4 mb-md-0 mb-lg-0i mb-sm-0 mb-xl-0 mb-xxl-0" width="100%"></div>
+
+        <!-- Options Section -->
+        <v-expansion-panels>
+          <v-expansion-panel>
+            <v-expansion-panel-title expand-icon="mdi-tune" collapse-icon="mdi-tune">Options</v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-tabs vertical v-model="settingTab">
+                <v-tab value="settings">Settings</v-tab>
+                <v-tab value="styles">Styles</v-tab>
+                <v-tab value="models">Models</v-tab>
+                <v-tab value="advanced">Advanced</v-tab>
+              </v-tabs>
+              <v-window v-model="settingTab">
+                <v-window-item value="settings">
+                  <!-- Performance Options -->
+                  <v-radio-group inline v-model="performance" label="Performance">
+                    <v-radio v-for="item in performanceOptions" :label="item" :value="item"></v-radio>
+                  </v-radio-group>
+                  <!-- Aspect Ratios -->
+                  <v-select
+                    v-model="aspectRatio"
+                    label="Aspect Ratios (width × height)"
+                    :items="aspectRatios"
+                  ></v-select>
+                  <!-- Image Number Slider -->
+                  <v-slider
+                    v-model="imageNumber"
+                    :min="1"
+                    :max="32"
+                    :step="1"
+                    label="Number of Images to Generate"
+                  >
+                    <template v-slot:append>
+                      <v-text-field
+                        v-model="imageNumber"
+                        hide-details
+                        single-line
+                        density="compact"
+                        type="number"
+                        style="width: 70px"
+                      ></v-text-field>
+                    </template>
+                  </v-slider>
+                  <!-- Negative Prompt -->
+                  <v-text-field
+                    v-model="negativePrompt"
+                    label="Negative Prompt"
+                    clearable
+                    rows="1"
+                    variant="solo-filled"
+                    auto-grow
+                    placeholder="Describing what you do not want to see."
+                  ></v-text-field>
+                  <!-- Random Checkbox -->
+                  <v-checkbox
+                    v-model="isRandom"
+                    label="Use Random Seed"
+                    @change="toggleRandom"
+                  ></v-checkbox>
+                  <!-- Random Seed -->
+                  <v-text-field
+                    v-model="randomSeed"
+                    label="Random Seed"
+                    :disabled="isRandom"
+                    type="number"
+                  ></v-text-field>
+                </v-window-item>
+                <v-window-item  value="styles">
+                  <!-- Styles Search Bar -->
+                  <v-combobox
+                    v-model="selectedStyles"
+                    :items="styles"
+                    label="Select specific style(s)"
+                    multiple
+                    chips
+                    small-chips
+                  ></v-combobox>
+                </v-window-item>
+                <v-window-item  value="models">
+                  <v-row>
+                    <v-col>
+                      <v-select
+                        v-model="baseModel"
+                        label="Base Model (SDXL only)"
+                        :items="baseModels"
+                      ></v-select>
+                    </v-col>
+                    <v-col>
+                      <v-select
+                        v-model="refiner"
+                        label="Refiner (SDXL)"
+                        :items="refiners"
+                      ></v-select>
+                    </v-col>
+                  </v-row>
+                  <v-row v-for="n in numLoras" :key="n-1">
+                    <v-col>
+                      <v-select
+                        v-model="selectedLoraModels[n-1]"
+                        :label="`LoRA ${n}`"
+                        :items="loraModels"
+                      ></v-select>
+                    </v-col>
+                    <v-col>
+                      <v-slider
+                        v-model="selectedLoraWeights[n-1]"
+                        :min="-2"
+                        :max="2"
+                        :step="0.01"
+                        :label="`LoRA ${n} Weight`"
+                      >
+                        <template v-slot:append>
+                          <v-text-field
+                            v-model="selectedLoraWeights[n-1]"
+                            hide-details
+                            single-line
+                            density="compact"
+                            type="number"
+                            style="width: 70px"
+                          ></v-text-field>
+                        </template>
+                      </v-slider>
+                    </v-col>
+                  </v-row>
+                </v-window-item>
+                <v-window-item  value="advanced">
+                  <v-slider
+                    v-model="guidanceScale"
+                    :min="1"
+                    :max="30"
+                    :step="0.01"
+                    label="Guidance Scale"
+                  >
+                    <template v-slot:append>
+                      <v-text-field
+                        v-model="guidanceScale"
+                        hide-details
+                        single-line
+                        density="compact"
+                        type="number"
+                        style="width: 70px"
+                      ></v-text-field>
+                    </template>
+                  </v-slider>
+                  <v-slider
+                    v-model="imageSharpness"
+                    :min="0"
+                    :max="30"
+                    :step="0.01"
+                    label="Image Sharpness"
+                  >
+                    <template v-slot:append>
+                      <v-text-field
+                        v-model="imageSharpness"
+                        hide-details
+                        single-line
+                        density="compact"
+                        type="number"
+                        style="width: 70px"
+                      ></v-text-field>
+                    </template>
+                  </v-slider>
+                </v-window-item>
+              </v-window>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+
+        <!-- Preview Section -->
+        <v-card
+            v-if="generating"
+          :loading="generating"
+          class="mx-auto my-12"
+        >
+          <template v-slot:loader="{ isActive }">
+            <v-progress-linear
+              v-model="runningTaskProgress"
+              :active="isActive"
+              color="#5a3cff"
+              height="4"
+              :indeterminate="waiting"
+            ></v-progress-linear>
+          </template>
+          <v-row>
+            <v-col v-if="generating" class="preview-image" cols="4">
+              <v-img :src="runningTaskPreviewImage" class="hero-image"></v-img>
+            </v-col>
+            <v-col cols="auto">
+              <v-card-item>
+                <v-card-title>[[ runningTaskMessage ]]</v-card-title>
+                <v-card-subtitle v-if="generating">Task id: [[ runningTaskId ]]</v-card-subtitle>
+              </v-card-item>
+              <v-card-text class="pa-0">
+                <v-slide-group
+                  show-arrows
+                  class="d-flex flex-row">
+                  <v-slide-group-item
+                    v-for="(image, index) in runningTaskResultImages"
+                    :key="index"
+                    v-slot="{ selectedClass }"
+                  >
+                    <v-img
+                      :src="image.src"
+                      :class="['generated-image', 'ma-2', 'previewable-image', selectedClass]"
+                      max-width="300px"
+                      min-width="300px"
+                      @click="expandImage(index, runningTaskResultImages)"
+                    >
+                      <v-container class="fill-height d-flex align-end pa-0">
+                        <v-row  align="end" class="ma-0">
+                          <v-spacer></v-spacer>
+                          <v-btn
+                            size="small"
+                            :color="likeButtonColor[image.id]? likeButtonColor[image.id]: 'grey-lighten-4'"
+                            variant="text"
+                            icon="mdi-heart"
+                            @click.stop="likeOrUnlike(image.id)"></v-btn>
+                          <v-btn
+                            size="small"
+                            :color="favoriteButtonColor[image.id]? favoriteButtonColor[image.id]: 'grey-lighten-4'"
+                            variant="text"
+                            icon="mdi-bookmark"
+                            @click.stop="favoriteOrUnfavorite(image.id)"></v-btn>
+                          <v-btn
+                            size="small"
+                            :color="shareButtonColor[image.id]? shareButtonColor[image.id]: 'grey-lighten-4'"
+                            variant="text"
+                            icon="mdi-share-variant"
+                            @click.stop="shareOrUnshare(image.id)"></v-btn>
+                        </v-row>
+                      </v-container>
+                    </v-img>
+                  </v-slide-group-item>
+                </v-slide-group>
+              </v-card-text>
+            </v-col>
+          </v-row>
+        </v-card>
+
+        <v-card
+          v-for="(result, historyIndex) in historyResults"
+          class="mx-auto my-12"
+        >
+          <v-card-item>
+            <v-card-title>Task [[ result.taskId ]]</v-card-title>
+            <v-card-subtitle>[[ result.params.prompt ]]</v-card-subtitle>
+          </v-card-item>
+          <v-card-text class="pa-0">
+            <v-slide-group
+              show-arrows
+              class="d-flex flex-row">
+              <v-slide-group-item
+                v-for="(image, index) in result.images"
+                :key="index"
+                v-slot="{ selectedClass }"
+              >
+                <v-img
+                  :src="image.src"
+                  :class="['generated-image', 'ma-2', 'previewable-image', selectedClass]"
+                  max-width="300px"
+                  min-width="300px"
+                  @click="expandImage(index, result.images)"
+                >
+                  <v-container class="fill-height d-flex align-end pa-0">
+                    <v-row  align="end" class="ma-0">
+                      <v-spacer></v-spacer>
+                      <v-btn
+                        size="small"
+                        :color="likeButtonColor[image.id]? likeButtonColor[image.id]: 'grey-lighten-4'"
+                        variant="text"
+                        icon="mdi-heart"
+                        @click.stop="likeOrUnlike(image.id)"></v-btn>
+                      <v-btn
+                        size="small"
+                        :color="favoriteButtonColor[image.id]? favoriteButtonColor[image.id]: 'grey-lighten-4'"
+                        variant="text"
+                        icon="mdi-bookmark"
+                        @click.stop="favoriteOrUnfavorite(image.id)"></v-btn>
+                      <v-btn
+                        size="small"
+                        :color="shareButtonColor[image.id]? shareButtonColor[image.id]: 'grey-lighten-4'"
+                        variant="text"
+                        icon="mdi-share-variant"
+                        @click.stop="shareOrUnshare(image.id)"></v-btn>
+                    </v-row>
+                  </v-container>
+                </v-img>
+              </v-slide-group-item>
+            </v-slide-group>
+            <v-expansion-panels>
+              <v-expansion-panel>
+                <v-expansion-panel-title>Generation parameters</v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-table density="compact">
+                    <template v-slot:default>
+                      <tbody>
+                        <tr
+                          v-for="(item, i) in result.paramsTable"
+                          :key="item.name"
+                        >
+                          <td><b>[[ item.name ]]</b></td>
+                          <td>[[ item.value ]]</td>
+                        </tr>
+                      </tbody>
+                    </template>
+                  </v-table>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </v-card-text>
+        </v-card>
+
+        <v-dialog
+          v-model="previewDialog"
+          width="75%"
+        >
+          <v-carousel
+            v-model="previewIndex"
+            hide-delimiter-background
+          >
+            <v-carousel-item
+              v-for="(image, i) in previewImages"
+              :src="image.src"
+              :key="i"
+              :value="i"
+            >
+            </v-carousel-item>
+          </v-carousel>
+        </v-dialog>
+      </v-container>
+    </div>
+
+    <script>
+      const { createApp } = Vue;
+      const { createVuetify } = Vuetify;
+
+      const defaultTheme = {
+        dark: true,
+        colors: {
+          background: '#0b0f19',
+          primary: '#5a3cff',
+        },
+      }
+
+      const vuetify = createVuetify({
+        theme: {
+          defaultTheme: 'defaultTheme',
+          themes: {
+            defaultTheme,
+          },
+        },
+      });
+
+      createApp({
+        delimiters: ['[[', ']]'],
+        data() {
+          return {
+            hostname: "",
+            settingTab: "settings",
+            prompt: '',
+            performance: 'low',
+            performanceOptions: [],
+            aspectRatio: '1:1',
+            aspectRatios: [],
+            imageNumber: 2,
+            negativePrompt: '',
+            isRandom: true,
+            randomSeed: 0,
+            selectedStyles: [],
+            styles: [], // Populate this with the 150 styles
+            baseModel: '',
+            baseModels: [],
+            refiner: '',
+            refiners: [],
+            loraModels: [],
+            firstLoraName: '',
+            firstLoraWeight: 0,
+            numLoras: 0,
+            selectedLoraModels: [],
+            selectedLoraWeights: [],
+            guidanceScale: 4,
+            imageSharpness: 2,
+            defaultOptions: {},
+            runningTaskId: '',
+            runningTaskStatus: '',
+            runningTaskProgress: 0,
+            runningTaskMessage: '',
+            runningTaskReturnUrl: false,
+            runningTaskPreviewImage: '',
+            runningTaskResultImages: [],
+            runningTaskQueueLength: 0,
+            runningTaskQueuePosiiton: 0,
+            generating: false,
+            generatingParams: {},
+            waiting: true,
+            maxHistory: 10,
+            historyResults: [],
+            previewDialog: false,
+            previewIndex: 0,
+            previewImages: [],
+            likeButtonColor: {},
+            favoriteButtonColor: {},
+            shareButtonColor: {},
+            skipLoading: false,
+            stopLoading: false,
+          };
+        },
+        methods: {
+          turnObjParams(obj) {
+            return Object.keys(obj).filter(key => obj[key])
+              .map(key => {
+                if (key === 'loras') {
+                  const lorasHtml = obj[key].filter(
+                    lora => lora.lora_model.toLowerCase() !== "none")
+                    .map((lora, index) => {
+                      return `${lora.lora_model}: ${lora.lora_weight}`;
+                    }).join('; ');
+                  return {name: key, value: lorasHtml};
+                } else if (key === 'style_selections') {
+                  return {name: key, value: obj[key].join(', ')};
+                } else if (obj[key]) {
+                  return {name: key, value: obj[key]};
+                }
+              });
+          },
+          packGenerationParameters() {
+            return {
+              prompt: this.prompt,
+              negative_prompt: this.negativePrompt,
+              style_selections: this.selectedStyles,
+              performance_selection: this.performance,
+              aspect_ratios_selection: this.aspectRatio,
+              image_number: this.imageNumber,
+              image_seed: this.isRandom? -1: this.randomSeed,
+              sharpness: this.imageSharpness,
+              guidance_scale: this.guidanceScale,
+              base_model: this.baseModel,
+              refiner_model: this.refiner,
+              loras: this.selectedLoraModels.map((model, index) => ({
+                lora_model: model,
+                lora_weight: this.selectedLoraWeights[index]
+              }))
+            };
+          },
+          startToGenerate(retry = 0) {
+            if (retry > 5) {
+              this.generating = false;
+              return;
+            }
+            let socket = null;
+            if (this.generating && this.runningTaskId) {
+              socket = new WebSocket(`ws://${this.hostname}/api/focus/ws/generate?` + new URLSearchParams({
+                task_id: this.runningTaskId,
+              }));
+            } else {
+              socket = new WebSocket(`ws://${this.hostname}/api/focus/ws/generate`);
+            }
+            socket.onopen = (event) => {
+              this.generatingParams = this.packGenerationParameters();
+              socket.send(JSON.stringify(this.generatingParams));
+              this.runningTaskPreviewImage = '';
+              this.runningTaskResultImages = [];
+              this.generating = true;
+              this.stopLoading = false;
+              this.skipLoading = false;
+            };
+            socket.onmessage = (event) => {
+              const status = JSON.parse(event.data);
+              this.runningTaskId = status.task_id;
+              this.runningTaskStatus = status.status;
+              this.runningTaskProgress = status.progress;
+              this.runningTaskMessage = status.message;
+              this.runningTaskReturnUrl = status.is_url;
+              this.runningTaskQueueLength = status.queue_length;
+              this.runningTaskQueuePosiiton = status.queue_position;
+              if (status.status === "queueing" || status.status === "preparing") {
+                this.waiting = true;
+              } else {
+                this.waiting = false;
+              }
+              if (status.status === "preview" && status.images.length > 0) {
+                if (status.is_url) {
+                  this.runningTaskPreviewImage = status.images[0].image_url;
+                } else {
+                  this.runningTaskPreviewImage = status.images[0].encoded_image;
+                }
+              }
+              if (status.status === "results" && status.images.length > 0) {
+                if (status.is_url) {
+                  this.runningTaskPreviewImage = status.images[status.images.length - 1].image_url;
+                  this.runningTaskResultImages = status.images.map(item => {
+                    return {src: item.image_url, id: item.image_id}});
+                } else {
+                  this.runningTaskPreviewImage = status.images[status.images.length - 1].encoded_image;
+                  this.runningTaskResultImages = status.images.map(item => {
+                    return {src: item.encoded_image, id: item.image_id}});
+                }
+              }
+              if (status.status === "skipped") {
+                this.skipLoading = false;
+              }
+              if (status.status === "finish") {
+                this.stopLoading = false;
+                this.generating = false;
+                if (status.is_url) {
+                  this.runningTaskResultImages = status.images.map(item => {
+                    return {src: item.image_url, id: item.image_id}});
+                } else {
+                  this.runningTaskResultImages = status.images.map(item => {
+                    return {src: item.encoded_image, id: item.image_id}});
+                }
+                this.historyResults.unshift({
+                  taskId: this.runningTaskId,
+                  params: this.generatingParams,
+                  paramsTable: this.turnObjParams(this.generatingParams),
+                  images: this.runningTaskResultImages,
+                });
+                if (this.historyResults.length > this.maxHistory) {
+                  this.historyResults.pop();
+                }
+              }
+            };
+            socket.onerror = (error) => {
+              // TODO: show error message
+              console.log("WebSocket error:", error);
+              if (this.generating) {
+                this.generating = false;
+                this.stopLoading = false;
+              }
+            };
+            socket.onclose = (event) => {
+              console.log("WebSocket connection closed:", event.code);
+              if (this.generating) {
+                if (this.runningTaskId) {
+                  setTimeout(() => {
+                    this.startToGenerate(retry + 1);
+                  }, 3000);
+                } else {
+                  this.generating = false;
+                  this.stopLoading = false;
+                }
+              }
+            };
+          },
+          skipGeneration() {
+            this.skipLoading = true;
+            fetch("/api/focus/skip?"+ new URLSearchParams({
+                task_id: this.runningTaskId,
+              }), {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+              if (result.status === "failed") {
+                this.skipLoading = false;
+                // TODO: show error message
+              }
+            })
+            .catch((error) => {
+              this.skipLoading = false;
+              console.error('Post skip error:', error);
+            });
+          },
+          stopGeneration() {
+            this.stopLoading = true;
+            fetch("/api/focus/stop?"+ new URLSearchParams({
+                task_id: this.runningTaskId,
+              }), {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+              },
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+              if (result.status === "failed") {
+                this.stopLoading = false;
+                // TODO: show error message
+              }
+            })
+            .catch((error) => {
+              this.stopLoading = false;
+              console.error('Post skip error:', error);
+            });
+          },
+          toggleRandom() {
+            if (this.isRandom) {
+              this.randomSeed = '';
+            }
+          },
+          expandImage(index, images) {
+            this.previewIndex = index;
+            this.previewImages = images;
+            this.previewDialog = true;
+          },
+          likeOrUnlike(imageId) {
+            let like = true;
+            if (this.likeButtonColor[imageId]) {
+              like = false;
+            }
+            fetch("/api/focus/like", {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                image_id: imageId,
+                like: like,
+              })
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+                if (result.success) {
+                  if (result.liked) {
+                    this.likeButtonColor[imageId] = 'red-lighten-1';
+                  } else {
+                    this.likeButtonColor[imageId] = '';
+                  }
+                }
+            })
+            .catch((error) => {
+              console.error('Post like error:', error);
+            });
+          },
+          favoriteOrUnfavorite(imageId) {
+            let favorite = true;
+            if (this.favoriteButtonColor[imageId]) {
+              favorite = false;
+            }
+            fetch("/api/focus/favorite", {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                image_id: imageId,
+                favorite: favorite,
+              })
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+                if (result.success) {
+                  if (result.favorited) {
+                    this.favoriteButtonColor[imageId] = 'orange-lighten-1';
+                  } else {
+                    this.favoriteButtonColor[imageId] = '';
+                  }
+                }
+            })
+            .catch((error) => {
+              console.error('Post favorite error:', error);
+            });
+          },
+          shareOrUnshare(imageId) {
+            let share = true;
+            if (this.shareButtonColor[imageId]) {
+              share = false;
+            }
+            fetch("/api/focus/share", {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                image_id: imageId,
+                share: share,
+              })
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+                if (result.success) {
+                  if (result.shared) {
+                    this.shareButtonColor[imageId] = 'blue-lighten-1';
+                  } else {
+                    this.shareButtonColor[imageId] = '';
+                  }
+                }
+            })
+            .catch((error) => {
+              console.error('Post share error:', error);
+            });
+          },
+        },
+        mounted() {
+          fetch("/api/focus/default_options", {
+            method: 'GET',
+          })
+          .then(response => {
+            if (response.status === 200) {
+              return response.json();
+            }
+            return Promise.reject(response);
+          })
+          .then((options) => {
+            this.defaultOptions = options;
+            this.hostname = options.hostname;
+            this.performanceOptions = options.performances.options;
+            this.performance = options.performances.default;
+            this.aspectRatios = options.aspect_ratios.options;
+            this.aspectRatio = options.aspect_ratios.default;
+            this.styles = options.styles.options;
+            this.selectedStyles = options.styles.default_list;
+            this.baseModels = options.base_models.options;
+            this.baseModel = options.base_models.default;
+            this.refiners = options.refiner_models.options;
+            this.refiner = options.refiner_models.default;
+            this.loraModels = options.first_lora_name.options;
+            this.firstLoraName = options.first_lora_name.default;
+            this.firstLoraWeight = options.first_lora_weight;
+            this.numLoras = options.num_loras;
+            this.selectedLoraModels = [];
+            this.selectedLoraWeights = [];
+            for (let i = 0; i < this.numLoras; i++) {
+              if (i === 0) {
+                this.selectedLoraModels.push(this.firstLoraName);
+                this.selectedLoraWeights.push(this.firstLoraWeight);
+              } else {
+                this.selectedLoraModels.push("None");
+                this.selectedLoraWeights.push(1.0);
+              }
+            }
+          })
+          .catch((error) => {
+            console.error('Get default value error:', error);
+          });
+        },
+      }).use(vuetify).mount('#app');
+    </script>
+  </body>
+</html>
