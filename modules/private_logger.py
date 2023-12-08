@@ -11,18 +11,20 @@ from modules.util import generate_temp_filename
 log_cache = {}
 
 
-def get_current_html_path():
-    date_string, local_temp_filename, only_name = generate_temp_filename(folder=modules.config.path_outputs,
+def get_current_html_path(base_dir: str | None = None):
+    folder = base_dir or modules.config.path_outputs
+    date_string, local_temp_filename, only_name = generate_temp_filename(folder=folder,
                                                                          extension='png')
     html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
     return html_name
 
 
-def log(img, dic):
+def log(img, dic, base_dir: str | None = None):
     if args_manager.args.disable_image_log:
         return
 
-    date_string, local_temp_filename, only_name = generate_temp_filename(folder=modules.config.path_outputs, extension='png')
+    folder = base_dir or modules.config.path_outputs
+    date_string, local_temp_filename, only_name = generate_temp_filename(folder=folder, extension='png')
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
     Image.fromarray(img).save(local_temp_filename)
     html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
@@ -105,4 +107,4 @@ def log(img, dic):
 
     log_cache[html_name] = middle_part
 
-    return
+    return local_temp_filename
