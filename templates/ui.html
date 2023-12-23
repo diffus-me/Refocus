@@ -14,6 +14,7 @@
       .hero-image {
         width: 100%;
         height: auto;
+        max-height: 512px;
       }
 
       .generated-image {
@@ -23,6 +24,61 @@
       .preview-image {
         min-width: 500px;
       }
+
+      .describe-image-button .v-btn__content {
+        white-space: normal;
+      }
+
+      .green-shadow {
+        text-shadow: 0px 4px 15px rgba(124, 179, 66, 0.8);
+      }
+
+      .image-preview {
+        background: #2a2a2a;
+      }
+
+      .FIE_topbar-save-button {
+        display: none !important;
+      }
+
+      .FIE_root {
+        background: #333 !important;
+      }
+
+      .FIE_tabs-drawer {
+        background: #333 !important;
+      }
+
+      .FIE_tab[aria-selected="false"] {
+        background: #525252 !important;
+      }
+
+      .FIE_tab-label {
+        color: rgb(140 140 140) !important;
+      }
+
+      .iIeCpq {
+        color: rgb(140 140 140) !important;
+      }
+
+      .FIE_topbar-zoom-label {
+        color: rgb(140 140 140) !important;
+      }
+
+      .FIE_canvas-node {
+        background: rgb(100 100 100) !important;
+      }
+
+      .FIE_tabs {
+        box-shadow: rgb(84 87 90 / 14%) 6px 8px 12px 0px !important;
+      }
+
+      .FIE_carousel-next-button {
+        background: linear-gradient(270deg, rgb(100 100 100) 1.56%, rgb(100 100 100 / 89%) 52.4%, rgb(100 100 100 / 53%) 76.04%, rgb(100 100 100 / 0%) 100%) !important;
+      }
+
+      .FIE_carousel-prev-button {
+        background: linear-gradient(90deg, rgb(100, 100, 100) 1.56%, rgba(100, 100, 100, 0.89) 52.4%, rgba(100, 100, 100, 0.533) 76.04%, rgba(100, 100, 100, 0) 100%) !important;
     </style>
   </head>
   <body>
@@ -32,6 +88,321 @@
           <div class="d-flex text-h1 font-weight-bold">imagine</div>
           <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
         </v-row>
+
+        <v-row class="d-flex pa-3">
+          <v-expansion-panels v-model="panelName" v-show="showImageOptions">
+            <v-expansion-panel value="image_options">
+              <v-expansion-panel-text eager>
+                <v-row
+                  class="pa-4"
+                  @mouseover="imageOptionsCloseButtonHover = true"
+                  @mouseleave="imageOptionsCloseButtonHover = false"
+                  @click="toggleImageOptions"
+                  style="cursor: pointer"
+                >
+                  <v-spacer></v-spacer>
+                  <v-icon :color="imageOptionsCloseButtonHover ? 'white' : 'grey'" icon="mdi-close"></v-icon>
+                </v-row>
+                <v-tabs vertical v-model="imageOptionTab">
+                  <v-tab value="uov">Upscale or Variation</v-tab>
+                  <v-tab value="ip">Image Prompt</v-tab>
+                  <v-tab value="inpaint">Inpaint or Outpaint</v-tab>
+                  <v-tab value="desc">Describe</v-tab>
+                </v-tabs>
+                <v-window v-model="imageOptionTab">
+                  <v-window-item value="uov" eager>
+                    <v-row>
+                      <v-col
+                        xl="6"
+                        lg="6"
+                        md="8"
+                        sm="12"
+                        cols="12"
+                      >
+                        <v-card variant="flat">
+                          <v-card-text>
+                            <v-file-input
+                              :rules="imageRules"
+                              accept="image/*"
+                              placeholder="Choose an image file"
+                              prepend-icon="mdi-camera"
+                              label="Upload Image File"
+                              clearable
+                              @change="event => previewUserImage(event, 'uovImageFile')"
+                              @click:clear="clearPreview('uovImageFile')"
+                            ></v-file-input>
+                            <v-img
+                              v-show="uovImageFile"
+                              :src="uovImageFile"
+                              class="mt-3 image-preview"
+                              max-height="500"
+                              contain
+                            ></v-img>
+                          </v-card-text>
+                        </v-card>
+                      </v-col>
+                      <v-col
+                        xl="6"
+                        lg="6"
+                        md="4"
+                        sm="12"
+                        cols="12"
+                      >
+                        <div class="d-flex justify-start">
+                          <v-radio-group v-model="uovSelection" label="Upscale or Variation">
+                            <v-radio
+                              v-for="(name, index) in uovMethods"
+                              :label="name"
+                              :value="name">
+                            </v-radio>
+                          </v-radio-group>
+                        </div>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                  <v-window-item value="ip" eager>
+                    <v-row>
+                      <v-col
+                        v-for="index in numImagePrompts"
+                        :key="index"
+                        xl="3"
+                        lg="6"
+                        md="6"
+                        sm="12"
+                        cols="12"
+                      >
+                        <v-card
+                          variant="elevated"
+                        >
+                          <v-card-text class="pa-0">
+                            <v-file-input
+                              :rules="imageRules"
+                              accept="image/*"
+                              placeholder="Choose an image file"
+                              prepend-icon="mdi-camera"
+                              label="Image File"
+                              clearable
+                              @change="event => previewUserImage(event, 'imagePromptImages', index - 1)"
+                              @click:clear="clearPreview('imagePromptImages', index - 1)"
+                            ></v-file-input>
+                            <v-img
+                              :src="imagePromptImages[index - 1]? imagePromptImages[index - 1]: 'https://diffus-public-static-assets.s3.amazonaws.com/static/placeholder-image.png'"
+                              class="mt-3 image-preview"
+                              :id="`image_prompts_container_${index - 1}`"
+                              :cover="imagePromptImages[index - 1]? false: true"
+                              height="480"
+                            ></v-img>
+                            <v-expansion-panels v-model="imagePromptAdvancedPanel">
+                              <v-expansion-panel value="advanced">
+                                <v-expansion-panel-title>Advanced Options</v-expansion-panel-title>
+                                <v-expansion-panel-text>
+                                  <v-row>
+                                    <v-col>
+                                      <v-slider
+                                        v-model="imagePrompts[index-1].params.stopAt"
+                                        :min="0"
+                                        :max="1"
+                                        :step="0.001"
+                                        label="Stop at"
+                                      >
+                                        <template v-slot:append>
+                                          <v-text-field
+                                            v-model="imagePrompts[index-1].params.stopAt"
+                                            hide-details
+                                            single-line
+                                            density="compact"
+                                            type="number"
+                                            style="width: 70px"
+                                          ></v-text-field>
+                                        </template>
+                                      </v-slider>
+                                    </v-col>
+                                    <v-col>
+                                      <v-slider
+                                        v-model="imagePrompts[index-1].params.weight"
+                                        :min="0"
+                                        :max="2"
+                                        :step="0.001"
+                                        label="Weight"
+                                      >
+                                        <template v-slot:append>
+                                          <v-text-field
+                                            v-model="imagePrompts[index-1].params.weight"
+                                            hide-details
+                                            single-line
+                                            density="compact"
+                                            type="number"
+                                            style="width: 70px"
+                                          ></v-text-field>
+                                        </template>
+                                      </v-slider>
+                                    </v-col>
+                                  </v-row>
+                                  <v-row>
+                                    <v-radio-group v-model="imagePrompts[index-1].params.controlType" inline>
+                                      <v-radio
+                                        v-for="(name, index) in ipTypes"
+                                        :label="name"
+                                        :value="name">
+                                      </v-radio>
+                                    </v-radio-group>
+                                  </v-row>
+                                </v-expansion-panel-text>
+                              </v-expansion-panel>
+                            </v-expansion-panels>
+                          </v-card-text>
+                        </v-card>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                  <v-window-item value="inpaint" eager>
+                    <v-row>
+                      <v-col cols="12">
+                        <v-card variant="flat">
+                          <v-card-text>
+                            <v-file-input
+                              :rules="imageRules"
+                              accept="image/*"
+                              placeholder="Choose an image file"
+                              prepend-icon="mdi-camera"
+                              label="Upload an Image File"
+                              clearable
+                              @change="editUserImage"
+                              @click:clear="clearEdit()"
+                            ></v-file-input>
+                            <div v-show="inpaintImageUploader !== null" id="inpaint-image-editor" style="height: 80vh; width: 100%;"></div>
+                          </v-card-text>
+                        </v-card>
+                      </v-col>
+                    </v-row>
+                    <v-tabs vertical v-model="inpaintSelection">
+                      <v-tab value="Inpaint or Outpaint (default)">Inpaint or Outpaint (default)</v-tab>
+                      <v-tab value="Improve Detail (face, hand, eyes, etc.)">Improve Detail (face, hand, eyes, etc.)</v-tab>
+                      <v-tab value="Modify Content (add objects, change background, etc.)">Modify Content (add objects, change background, etc.)</v-tab>
+                    </v-tabs>
+                    <v-window v-model="inpaintSelection">
+                      <v-window-item value="Inpaint or Outpaint (default)">
+                        <div class="ma-4">
+                          <v-combobox
+                            v-model="outpaintDirection"
+                            :items="['Left', 'Right', 'Top', 'Bottom']"
+                            label="Outpaint Direction"
+                            multiple
+                            chips
+                            small-chips
+                          ></v-combobox>
+                         </div>
+                      </v-window-item>
+                      <v-window-item value="Improve Detail (face, hand, eyes, etc.)">
+                        <div class="ma-4">
+                          <v-text-field
+                            v-model="inpaintImprovementPrompt"
+                            label="Inpaint Additional Prompt"
+                            clearable
+                            rows="1"
+                            variant="solo-filled"
+                            auto-grow
+                            placeholder="Describing what you want to see at the masks for enhencement."
+                          ></v-text-field>
+                          <span>Prompts Quick List</span>
+                          <v-chip-group v-model="inpaintImprovementPrompt">
+                            <v-chip value="highly detailed face">highly detailed face</v-chip>
+                            <v-chip value="detailed girl face">detailed girl face</v-chip>
+                            <v-chip value="detailed man face">detailed man face</v-chip>
+                            <v-chip value="detailed hand">detailed hand</v-chip>
+                            <v-chip value="beautiful eyes">beautiful eyes</v-chip>
+                          </v-chip-group>
+                        </div>
+                      </v-window-item>
+                      <v-window-item value="Modify Content (add objects, change background, etc.)">
+                        <div class="ma-4">
+                          <v-text-field
+                            v-model="inpaintModificationPrompt"
+                            label="Inpaint Additional Prompt"
+                            clearable
+                            rows="1"
+                            variant="solo-filled"
+                            auto-grow
+                            placeholder="Describing what you want to see at the masks for modification."
+                          ></v-text-field>
+                        </div>
+                      </v-window-item>
+                    </v-window>
+                  </v-window-item>
+                  <v-window-item value="desc" eager>
+                    <v-row>
+                      <v-col
+                        xxl="6"
+                        xl="6"
+                        lg="6"
+                        md="8"
+                        sm="12"
+                        cols="12"
+                      >
+                        <v-card variant="flat">
+                          <v-card-text>
+                            <v-file-input
+                              :rules="imageRules"
+                              accept="image/*"
+                              placeholder="Choose an image file"
+                              prepend-icon="mdi-camera"
+                              label="Image File"
+                              clearable
+                              @change="event => previewUserImage(event, 'describeImageUploader')"
+                              @click:clear="clearPreview('describeImageUploader')"
+                            ></v-file-input>
+                            <v-img
+                              v-show="describeImageUploader"
+                              :src="describeImageUploader"
+                              class="mt-3 image-preview"
+                              max-height="500"
+                              contain
+                            ></v-img>
+                          </v-card-text>
+                        </v-card>
+                      </v-col>
+                      <v-col
+                        xxl="6"
+                        xl="6"
+                        lg="6"
+                        md="4"
+                        sm="12"
+                        cols="12"
+                      >
+                        <div class="ma-2">
+                          <v-radio-group v-model="contentTypeSelection" label="Content Type" inline>
+                            <v-radio
+                              v-for="(name, index) in contentTypes"
+                              :label="name"
+                              :value="name">
+                            </v-radio>
+                          </v-radio-group>
+                        </div>
+                        <div class="ma-4">
+                          <v-btn
+                            class="describe-image-button"
+                            block
+                            color="grey-lighten-1"
+                            height="48"
+                          >Describe into Prompt (BLIP)</v-btn>
+                        </div>
+                        <div class="ma-4">
+                          <v-btn
+                            class="describe-image-button"
+                            block
+                            color="#5a3cff"
+                            height="48"
+                          >Describe into Prompt (GPT-4)</v-btn>
+                        </div>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                </v-window>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </v-row>
+
         <v-row>
           <v-col
             xxl="9"
@@ -49,7 +420,19 @@
               auto-grow
               placeholder="Describe what you want to see..."
               min-height="56px"
-            ></v-textarea>
+            >
+              <template v-slot:append-inner>
+                <v-btn
+                  :color="showImageOptions? 'light-green-lighten-5': 'grey-lighten-4'"
+                  variant="text"
+                  @click="toggleImageOptions"
+                >
+                  <span
+                    :class="{'material-icons': true, 'green-shadow': showImageOptions}"
+                  >add_photo_alternate</span>
+                </v-btn>
+              </template>
+            </v-textarea>
           </v-col>
           <v-col
             xxl="3"
@@ -59,7 +442,8 @@
             sm="12"
             cols="12"
           >
-            <v-btn v-if="!generating" @click="startToGenerate" width="100%" height="56px" color="#5a3cff">Generate</v-btn>
+            <v-btn
+              v-if="!generating" @click="startToGenerate" width="100%" height="56px" color="#5a3cff">Generate</v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
             <v-col class="d-flex pa-0 mr-1">
               <v-btn @click="skipGeneration" :loading="skipLoading" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
@@ -262,7 +646,7 @@
             <v-col cols="auto">
               <v-card-item>
                 <v-card-title>[[ runningTaskMessage ]]</v-card-title>
-                <v-card-subtitle v-if="generating">Task id: [[ runningTaskId ]]</v-card-subtitle>
+                <v-card-subtitle v-if="runningTaskId">Task id: [[ runningTaskId ]]</v-card-subtitle>
               </v-card-item>
               <v-card-text class="pa-0">
                 <v-slide-group
@@ -316,7 +700,7 @@
           class="mx-auto my-12"
         >
           <v-card-item>
-            <v-card-title>Task [[ result.taskId ]]</v-card-title>
+            <v-card-title>Task ID [[ result.taskId ]]</v-card-title>
             <v-card-subtitle>[[ result.params.prompt ]]</v-card-subtitle>
           </v-card-item>
           <v-card-text class="pa-0">
@@ -375,6 +759,76 @@
                           <td><b>[[ item.name ]]</b></td>
                           <td>[[ item.value ]]</td>
                         </tr>
+                        <tr v-if="result.params.uov_input_image"
+                        >
+                          <td><b>upscale & variation input</b></td>
+                          <td>
+                            <v-img
+                              :src="result.params.uov_input_image.encoded_image"
+                              max-width="300px"
+                              min-width="300px"
+                              @click="expandImage(0, [{src: result.params.uov_input_image.encoded_image}])"
+                            >
+                          </td>
+                        </tr>
+                        <tr v-if="result.params.ip_ctrls"
+                        >
+                          <td><b>image prompts</b></td>
+                          <td>
+                            <v-slide-group
+                              show-arrows
+                              class="d-flex flex-row">
+                              <v-slide-group-item
+                                v-for="(ip_control, index) in result.params.ip_ctrls"
+                                :key="index"
+                                v-slot="{ selectedClass }"
+                              >
+                                <v-img
+                                  :src="ip_control.ip_image.encoded_image"
+                                  :class="['generated-image', 'ma-2', 'previewable-image', selectedClass]"
+                                  max-width="300px"
+                                  min-width="300px"
+                                  @click="expandImage(index, result.params.ip_ctrls.map(item => {return {src: item.ip_image.encoded_image};}))"
+                                >
+                                </v-img>
+                              </v-slide-group-item>
+                            </v-slide-group>
+                          </td>
+                        </tr>
+                        <tr v-if="result.params.inpaint_input_image"
+                        >
+                          <td><b>inpaint inputs</b></td>
+                          <td>
+                            <v-slide-group
+                              show-arrows
+                              class="d-flex flex-row">
+                              <v-slide-group-item
+                                v-slot="{ selectedClass }"
+                              >
+                                <v-img
+                                  :src="result.params.inpaint_input_image.image.encoded_image"
+                                  :class="['generated-image', 'ma-2', 'previewable-image', selectedClass]"
+                                  max-width="300px"
+                                  min-width="300px"
+                                  @click="expandImage(0, [{src: result.params.inpaint_input_image.image.encoded_image}, {src: result.params.inpaint_input_image.mask.encoded_image}])"
+                                >
+                                </v-img>
+                              </v-slide-group-item>
+                              <v-slide-group-item
+                                v-slot="{ selectedClass }"
+                              >
+                                <v-img
+                                  :src="result.params.inpaint_input_image.mask.encoded_image"
+                                  :class="['generated-image', 'ma-2', 'previewable-image', selectedClass]"
+                                  max-width="300px"
+                                  min-width="300px"
+                                  @click="expandImage(1, [{src: result.params.inpaint_input_image.image.encoded_image}, {src: result.params.inpaint_input_image.mask.encoded_image}])"
+                                >
+                                </v-img>
+                              </v-slide-group-item>
+                            </v-slide-group>
+                          </td>
+                        </tr>
                       </tbody>
                     </template>
                   </v-table>
@@ -404,6 +858,8 @@
       </v-container>
     </div>
 
+    <script src="https://scaleflex.cloudimg.io/v7/plugins/filerobot-image-editor/latest/filerobot-image-editor.min.js"></script>
+    <script type="text/javascript" src="/api/focus/static/js/mask.js"></script>
     <script>
       const { createApp } = Vue;
       const { createVuetify } = Vuetify;
@@ -441,7 +897,7 @@
             isRandom: true,
             randomSeed: 0,
             selectedStyles: [],
-            styles: [], // Populate this with the 150 styles
+            styles: [],
             baseModel: '',
             baseModels: [],
             refiner: '',
@@ -477,28 +933,180 @@
             shareButtonColor: {},
             skipLoading: false,
             stopLoading: false,
+            panelName: 'image_options',
+            showImageOptions: false,
+            imageOptionTab: 'uov',
+            uovSelection: 'Disabled',
+            uovMethods: [],
+            imagePrompts: [],
+            ipTypes: [],
+            numImagePrompts: 4,
+            imagePromptImages: [],
+            imagePromptAdvancedPanel: "",
+            contentTypeSelection: "Photograph",
+            contentTypes: [],
+            describeImageUploader: null,
+            inpaintImageUploader: null,
+            inpaintSelection: "Inpaint or Outpaint (default)",
+            outpaintDirection: [],
+            inpaintImprovementPrompt: "",
+            inpaintModificationPrompt: "",
+            inpaintStep: "Upload Image",
+            uovImageFile: "",
+            imageRules: [
+              value => {
+                return !value || !value.length || value[0].size < 10000000 || 'Avatar size should be less than 10 MB!'
+              },
+            ],
+            imageEditor: null,
+            imageOptionsCloseButtonHover: false,
+            toolObserver: null,
+            optionsObserver: null,
           };
         },
         methods: {
-          turnObjParams(obj) {
-            return Object.keys(obj).filter(key => obj[key])
-              .map(key => {
-                if (key === 'loras') {
-                  const lorasHtml = obj[key].filter(
-                    lora => lora.lora_model.toLowerCase() !== "none")
-                    .map((lora, index) => {
-                      return `${lora.lora_model}: ${lora.lora_weight}`;
-                    }).join('; ');
-                  return {name: key, value: lorasHtml};
-                } else if (key === 'style_selections') {
-                  return {name: key, value: obj[key].join(', ')};
-                } else if (obj[key]) {
-                  return {name: key, value: obj[key]};
+          previewUserImage(image, imageSrcProperty, index=null) {
+            const file = event.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                if (index != null)
+                  this[imageSrcProperty][index] = e.target.result;
+                else
+                  this[imageSrcProperty] = e.target.result;
+              };
+              reader.readAsDataURL(file);
+            }
+          },
+          clearPreview(imageSrcProperty, index=null) {
+            if (index != null)
+              this[imageSrcProperty][index] = null;
+            else
+              this[imageSrcProperty] = null;
+          },
+          editUserImage(event) {
+            const targetNode = document.getElementById("inpaint-image-editor");
+            const config = {childList: true, subtree: true};
+            if (!this.toolObserver) {
+              const callback = (mutationList, observer) => {
+                const tools = document.querySelectorAll(".FIE_tools-item-wrapper");
+                if (tools.length > 0) {
+                  tools.forEach(tool => {
+                    const toolText = tool.querySelector("div > label > span").textContent;
+                    if (toolText === "Image" || toolText === "Polygon" || toolText === "Arrow") {
+                      tool.style.display = "none";
+                    }
+                  });
+                  this.toolObserver.disconnect();
                 }
-              });
+              };
+              this.toolObserver = new MutationObserver(callback);
+              this.toolObserver.observe(targetNode, config);
+            }
+            if (!this.optionsObserver) {
+              const optionsCallback = (mutationList, observer) => {
+                const options = document.querySelectorAll(".FIE_annotation-option-triggerer");
+                const penOptions = document.querySelector(".FIE_pen-tool-options");
+                const lineOptions = document.querySelector(".FIE_line-tool-options");
+                if (options.length > 0) {
+                  options.forEach(option => {
+                    if (option.title === "Text alignment" || option.title === "Text spacings" || option.title === "Shadow" || option.title === "Corner Radius") {
+                      option.style.display = "none";
+                    }
+                    if (!penOptions && !lineOptions) {
+                      if (option.title === "Stroke") {
+                        option.style.display = "none";
+                        }
+                    }
+                  });
+                  }
+              };
+              this.optionsObserver = new MutationObserver(optionsCallback);
+              this.optionsObserver.observe(targetNode, config);
+            }
+            const file = event.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                this.inpaintImageUploader = e.target.result;
+                this.ImageEditor.render({
+                  source: e.target.result,
+                });
+              };
+              reader.readAsDataURL(file);
+            }
+          },
+          clearEdit() {
+            this.inpaintImageUploader = null;
+          },
+          initializeFilerobot() {
+            const container = document.getElementById("inpaint-image-editor");
+            const config = {
+              tabsIds: [FilerobotImageEditor.TABS.ANNOTATE, FilerobotImageEditor.TABS.RESIZE],
+              defaultTabId: FilerobotImageEditor.TABS.ANNOTATE,
+              defaultToolId: FilerobotImageEditor.TOOLS.PEN,
+              observePluginContainerSize: true,
+              annotationsCommon: {
+                fill: '#FFFFFF',
+                stroke: '#FFFFFF',
+                opacity: 0.6,
+              },
+              Pen: {
+                strokeWidth: 30,
+              },
+              Text: {
+                text: 'Change me!',
+                fontSize: 28,
+                fontStyle: "bold",
+              },
+              Line: {
+                lineCap: 'butt',
+                strokeWidth: 16,
+              },
+              onBeforeSave: ()=>false,
+              onSave: (imageInfo, designState) => {
+                return false;
+              }
+            };
+            this.ImageEditor = new window.FilerobotImageEditor(container, config);
+          },
+          toggleImageOptions() {
+            if (this.showImageOptions) {
+              this.showImageOptions = false;
+            } else {
+              this.panelName = 'image_options';
+              this.showImageOptions = true;
+            }
+          },
+          turnObjParams(obj) {
+            return Object.keys(obj).filter(key => {
+              if (key === "uov_input_image") {
+                return false;
+              } else if (key === "ip_ctrls") {
+                return false;
+              } else if (key === "inpaint_input_image") {
+                return false;
+              } else {
+                return obj[key];
+              }
+            })
+            .map(key => {
+              if (key === 'loras') {
+                const lorasHtml = obj[key].filter(
+                  lora => lora.lora_model.toLowerCase() !== "none")
+                  .map((lora, index) => {
+                    return `${lora.lora_model}: ${lora.lora_weight}`;
+                  }).join('; ');
+                return {name: key, value: lorasHtml};
+              } else if (key === 'style_selections') {
+                return {name: key, value: obj[key].join(', ')};
+              } else if (obj[key]) {
+                return {name: key, value: obj[key]};
+              }
+            });
           },
           packGenerationParameters() {
-            return {
+            let genParams = {
               prompt: this.prompt,
               negative_prompt: this.negativePrompt,
               style_selections: this.selectedStyles,
@@ -515,6 +1123,63 @@
                 lora_weight: this.selectedLoraWeights[index]
               }))
             };
+            if (this.showImageOptions) {
+              if (this.imageOptionTab === "uov") {
+                if (this.uovImageFile) {
+                  genParams.input_image_checkbox = this.showImageOptions;
+                  genParams.current_tab = this.imageOptionTab;
+                  genParams.uov_method = this.uovSelection;
+                  genParams.uov_input_image = {
+                    encoded_image: this.uovImageFile,
+                  };
+                }
+              } else if (this.imageOptionTab === "ip") {
+                for (const [index, imagePromptUploader] of this.imagePromptImages.entries()) {
+                  if (imagePromptUploader) {
+                    genParams.input_image_checkbox = this.showImageOptions;
+                    genParams.current_tab = this.imageOptionTab;
+                    if (typeof genParams.ip_ctrls === "undefined") {
+                      genParams.ip_ctrls = [];
+                    }
+                    ip_control = {
+                      ip_image: {
+                        encoded_image: imagePromptUploader,
+                      },
+                      ip_stop: this.imagePrompts[index].params.stopAt,
+                      ip_weight: this.imagePrompts[index].params.weight,
+                      ip_type: this.imagePrompts[index].params.controlType,
+                    };
+                    genParams.ip_ctrls.push(ip_control);
+                  }
+                }
+              } else if (this.imageOptionTab === "inpaint") {
+                if (this.inpaintImageUploader) {
+                  genParams.input_image_checkbox = this.showImageOptions;
+                  genParams.current_tab = this.imageOptionTab;
+                  const imageData = this.ImageEditor.getCurrentImgData();
+                  const inpaintMask = drawAnnotationsOnCanvas(
+                    imageData.designState,
+                    imageData.imageData.width,
+                    imageData.imageData.height).toDataURL("image/png");
+                  genParams.inpaint_input_image = {
+                    image: {
+                      encoded_image: this.inpaintImageUploader,
+                    },
+                    mask: {
+                      encoded_image: inpaintMask,
+                    },
+                  }
+                  if (this.inpaintSelection === "Inpaint or Outpaint (default)") {
+                    genParams.outpaint_selections = this.outpaintDirection;
+                  } else if (this.inpaintSelection === "Improve Detail (face, hand, eyes, etc.)") {
+                    genParams.inpaint_additional_prompt = this.inpaintImprovementPrompt;
+                  } else if (this.inpaintSelection === "Modify Content (add objects, change background, etc.)") {
+                    genParams.inpaint_additional_prompt = this.inpaintModificationPrompt;
+                  }
+                }
+              }
+            }
+            return genParams;
           },
           startToGenerate(retry = 0) {
             if (retry > 5) {
@@ -529,12 +1194,13 @@
             } else {
               socket = new WebSocket(`ws://${this.hostname}/api/focus/ws/generate`);
             }
+            this.generating = true;
+            this.runningTaskMessage = "Preparing...";
             socket.onopen = (event) => {
               this.generatingParams = this.packGenerationParameters();
               socket.send(JSON.stringify(this.generatingParams));
               this.runningTaskPreviewImage = '';
               this.runningTaskResultImages = [];
-              this.generating = true;
               this.stopLoading = false;
               this.skipLoading = false;
             };
@@ -814,6 +1480,12 @@
             this.firstLoraName = options.first_lora_name.default;
             this.firstLoraWeight = options.first_lora_weight;
             this.numLoras = options.num_loras;
+            this.uovMethods = options.uovs.options;
+            this.uovSelection = options.uovs.default;
+            this.ipTypes = options.ip_types.options;
+            this.numImagePrompts = options.num_image_prompts;
+            this.contentTypeSelection = options.content_types.default;
+            this.contentTypes = options.content_types.options;
             this.selectedLoraModels = [];
             this.selectedLoraWeights = [];
             for (let i = 0; i < this.numLoras; i++) {
@@ -825,6 +1497,19 @@
                 this.selectedLoraWeights.push(1.0);
               }
             }
+            for (let i = 0; i < this.numImagePrompts; i++) {
+              this.imagePrompts.push({
+                params: {
+                  stopAt: 0.5,
+                  weight: 1.0,
+                  controlType: options.ip_types.default,
+                },
+              });
+            }
+            for (let i = 0; i < this.numImagePrompts; i++) {
+              this.imagePromptImages.push(null);
+            }
+            this.initializeFilerobot();
           })
           .catch((error) => {
             console.error('Get default value error:', error);
