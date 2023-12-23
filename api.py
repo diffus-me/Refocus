@@ -21,9 +21,20 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, BaseSettings
 
-from fastapi import FastAPI, Request, WebSocket, Header, HTTPException, WebSocketDisconnect, WebSocketException, status
+from fastapi import (
+    FastAPI,
+    Request,
+    WebSocket,
+    Header,
+    HTTPException,
+    WebSocketDisconnect,
+    WebSocketException,
+    status,
+    File, 
+    UploadFile)
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 import modules.config
 import modules.flags as flags
@@ -116,6 +127,11 @@ class ControlConfig(BaseModel):
         default=flags.default_parameters[flags.default_ip][1], description='Weight for controlnet.')
     ip_type: str = Field(
         default=flags.default_ip, description=f'Image prompt type. Options are: {flags.ip_list}')
+
+
+class InpaintInputImage(BaseModel):
+    image: ImageSource = Field(description='Image for inpaint.')
+    mask: ImageSource = Field(description='Mask for inpaint.')
 
 
 class AdvancedOptions(BaseModel):
@@ -237,7 +253,7 @@ class GenerationOption(BaseModel):
         default=None, description='Input image for upscale, variation or image prompt.')
     outpaint_selections: list[str] = Field(
         default=[], description="Outpaint directions. 'Left', 'Right', 'Top', 'Bottom'")
-    inpaint_input_image: ImageSource | None = Field(
+    inpaint_input_image: InpaintInputImage | None = Field(
         default=None, description='Input image for inpaint.')
     inpaint_additional_prompt: str = Field(
         default='', description='Describe what you want to inpaint.')
@@ -276,6 +292,9 @@ class DefaultOptions(BaseModel):
     first_lora_weight: float = Field(description='First Lora Weight.')
     num_loras: int = Field(description='Number of Loras.')
     uovs: OptionList = Field(description='Upscale or variation options.')
+    ip_types: OptionList = Field(description='Image prompt Control Types.')
+    num_image_prompts: int = Field(description='Number of image prompts.')
+    content_types: OptionList = Field(description='Content types for describe image.')
 
 
 class Like(BaseModel):
@@ -340,6 +359,15 @@ async def download_image(
         output_path: str,
         headers: dict[str, str] = dict(),
         append_ext: bool = False) -> tuple[str | None, str | None]:
+    if url.startswith("file://"):
+        output_path = url.removeprefix("file://")
+        if os.path.exists(output_path):
+            async with aiofiles.open(output_path, mode='rb') as f:
+                data = await f.read()
+            return output_path, base64.b64encode(data).decode('utf-8')
+        else:
+            logger.error(f"Download failed for image {url} with status code 404: File not found")
+            return None, None
     async with session.get(url, headers=headers) as resp:
         if resp.status == 200:
             content_type = resp.headers.get("content-type", None)
@@ -474,6 +502,9 @@ def base64_to_numpy_array(base64_str: str) -> np.ndarray:
 
     # Convert the bytes to a PIL image
     image = Image.open(io.BytesIO(image_data))
+
+    # Convert the PIL image to RGB mode, dropping the alpha channel if present
+    image = image.convert('RGB')
 
     # Convert the PIL image to a NumPy array
     numpy_array = np.array(image)
@@ -616,13 +647,32 @@ async def extract_progress(progress: Progress, is_url: bool, user_id: str, start
     )
 
 
+def strip_encoded_image_from_generation_option(generation_params: GenerationOption) -> GenerationOption:
+    generation_params = copy.deepcopy(generation_params)
+    if generation_params.uov_input_image:
+        generation_params.uov_input_image.encoded_image = ""
+    if generation_params.inpaint_input_image:
+        generation_params.inpaint_input_image.image.encoded_image = ""
+        generation_params.inpaint_input_image.mask.encoded_image = ""
+    for ip_ctrl in generation_params.ip_ctrls:
+        if ip_ctrl.ip_image:
+            ip_ctrl.ip_image.encoded_image = ""
+    return generation_params
+
+
 async def update_database(progress: Progress, previous_status: str | None, user_id: str, generation_params: GenerationOption | None = None) -> str:
     async with get_db() as db:
         if previous_status is None and generation_params is not None:
             hostname = socket.gethostname()
             server_ip = socket.gethostbyname(hostname)
             await insert_focus_task_record(
-                db, user_id, progress.task_id, progress.flag, generation_params.json(), hostname, server_ip)
+                db,
+                user_id,
+                progress.task_id,
+                progress.flag,
+                strip_encoded_image_from_generation_option(generation_params).json(),
+                hostname,
+                server_ip)
         if previous_status != progress.flag:
             if progress.flag == "finish":
                 await update_focus_task_record(
@@ -656,6 +706,7 @@ def get_hostname(request: Request, hostname_from_setting: str) -> str:
 
 def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable, recover_task: Callable, stop_clicked: Callable, skip_clicked: Callable) -> FastAPI:
 
+    app.mount("/api/focus/static", StaticFiles(directory="static"), name="static")
 
     templates = Jinja2Templates(directory="templates", autoescape=False, auto_reload=True)
 
@@ -675,6 +726,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                     image = config.ip_ctrls[i].ip_image
                     if image:
                         image_source = await verify_image(http_session, image, user_id, subdir="fooocus/inputs")
+                        config.ip_ctrls[i].ip_image = image_source
                         if image_source.encoded_image:
                             image_np = base64_to_numpy_array(image_source.encoded_image)
                             ip_ctrls += [image_np, config.ip_ctrls[i].ip_stop, config.ip_ctrls[i].ip_weight, config.ip_ctrls[i].ip_type]
@@ -685,14 +737,23 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             uov_input_image = None
             if config.uov_input_image:
                 uov_input_image_source = await verify_image(http_session, config.uov_input_image, user_id, subdir="fooocus/inputs")
+                config.uov_input_image = uov_input_image_source
                 if uov_input_image_source.encoded_image:
                     uov_input_image = base64_to_numpy_array(uov_input_image_source.encoded_image)
 
             inpaint_input_image = None
+            inpaint_mask = None
             if config.inpaint_input_image:
-                inpaint_input_image_source = await verify_image(http_session, config.inpaint_input_image, user_id, subdir="fooocus/inputs")
+                inpaint_input_image_source = await verify_image(
+                    http_session, config.inpaint_input_image.image, user_id, subdir="fooocus/inputs")
+                config.inpaint_input_image.image = inpaint_input_image_source
+                inpaint_mask_source = await verify_image(
+                    http_session, config.inpaint_input_image.mask, user_id, subdir="fooocus/inputs")
+                config.inpaint_input_image.mask = inpaint_mask_source
                 if inpaint_input_image_source.encoded_image:
                     inpaint_input_image = base64_to_numpy_array(inpaint_input_image_source.encoded_image)
+                if inpaint_mask_source.encoded_image:
+                    inpaint_mask = base64_to_numpy_array(inpaint_mask_source.encoded_image)
 
             inpaint_mask_image = None
             if config.inpaint_mask_image:
@@ -704,6 +765,10 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 image_seed = refresh_seed(True, config.image_seed)
             else:
                 image_seed = refresh_seed(False, config.image_seed)
+
+            inpaint_input = None
+            if inpaint_input_image is not None and inpaint_mask is not None:
+                inpaint_input = {"image": inpaint_input_image, "mask": inpaint_mask}
 
             ctrls = [
                 config.prompt,
@@ -720,7 +785,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             ctrls += [config.base_model, config.refiner_model, config.refiner_switch] + lora_ctrls
             ctrls += [config.input_image_checkbox, config.current_tab]
             ctrls += [config.uov_method, uov_input_image]
-            ctrls += [config.outpaint_selections, inpaint_input_image, config.inpaint_additional_prompt, inpaint_mask_image]
+            ctrls += [config.outpaint_selections, inpaint_input, config.inpaint_additional_prompt, inpaint_mask_image]
             ctrls += ip_ctrls
             return ctrls
 
@@ -799,7 +864,10 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             first_lora_name=OptionList(default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames),
             first_lora_weight=modules.config.default_loras[0][1],
             num_loras=len(modules.config.default_loras),
-            uovs=OptionList(default=flags.disabled, options=flags.uov_list)
+            uovs=OptionList(default=flags.disabled, options=flags.uov_list),
+            ip_types=OptionList(default=flags.default_ip, options=flags.ip_list),
+            num_image_prompts=4,
+            content_types=OptionList(default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]),
         )
 
 
@@ -846,6 +914,34 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 "success": True,
                 "shared": share.share,
             }
+
+
+    @app.post("/api/focus/upload/")
+    async def upload_image(subdir: str = "", file: UploadFile = File(...), user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        if user_id != "local" and settings.output_base_dir:
+            output_dir = os.path.join(
+                settings.output_base_dir, get_user_subdir(user_id), "inputs", "focus")
+            if subdir:
+                output_dir = os.path.join(output_dir, subdir)
+        else:
+            output_dir = os.path.join("./inputs")
+        os.makedirs(output_dir, exist_ok=True)
+        try:
+            if not file.filename:
+                file.filename = str(uuid.uuid4())
+            else:
+                file.filename = str(uuid.uuid4()) + file.filename
+            file_path = os.path.join(output_dir, file.filename)
+
+            async with aiofiles.open(file_path, 'wb') as out_file:
+                while content := await file.read(1024):  # Read 1024 bytes at a time
+                    await out_file.write(content)
+
+            return {"filename": file_path}
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"message": str(e)})
 
 
     @app.get('/ui', response_class=HTMLResponse)
