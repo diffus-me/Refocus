@@ -21,7 +21,17 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, BaseSettings
 
-from fastapi import FastAPI, Request, WebSocket, Header, HTTPException, WebSocketDisconnect, WebSocketException, status
+from fastapi import (
+    FastAPI,
+    Request,
+    WebSocket,
+    Header,
+    HTTPException,
+    WebSocketDisconnect,
+    WebSocketException,
+    status,
+    File, 
+    UploadFile)
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -263,6 +273,9 @@ class DefaultOptions(BaseModel):
     first_lora_weight: float = Field(description='First Lora Weight.')
     num_loras: int = Field(description='Number of Loras.')
     uovs: OptionList = Field(description='Upscale or variation options.')
+    ip_types: OptionList = Field(description='Image prompt Control Types.')
+    num_image_prompts: int = Field(description='Number of image prompts.')
+    content_types: OptionList = Field(description='Content types for describe image.')
 
 
 class Like(BaseModel):
@@ -327,6 +340,15 @@ async def download_image(
         output_path: str,
         headers: dict[str, str] = dict(),
         append_ext: bool = False) -> tuple[str | None, str | None]:
+    if url.startswith("file://"):
+        output_path = url.removeprefix("file://")
+        if os.path.exists(output_path):
+            async with aiofiles.open(output_path, mode='rb') as f:
+                data = await f.read()
+            return output_path, base64.b64encode(data).decode('utf-8')
+        else:
+            logger.error(f"Download failed for image {url} with status code 404: File not found")
+            return None, None
     async with session.get(url, headers=headers) as resp:
         if resp.status == 200:
             content_type = resp.headers.get("content-type", None)
@@ -777,7 +799,10 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             first_lora_name=OptionList(default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames),
             first_lora_weight=modules.config.default_loras[0][1],
             num_loras=len(modules.config.default_loras),
-            uovs=OptionList(default=flags.disabled, options=flags.uov_list)
+            uovs=OptionList(default=flags.disabled, options=flags.uov_list),
+            ip_types=OptionList(default=flags.default_ip, options=flags.ip_list),
+            num_image_prompts=4,
+            content_types=OptionList(default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]),
         )
 
 
@@ -824,6 +849,34 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 "success": True,
                 "shared": share.share,
             }
+
+
+    @app.post("/api/focus/upload/")
+    async def upload_image(subdir: str = "", file: UploadFile = File(...), user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        if user_id != "local" and settings.output_base_dir:
+            output_dir = os.path.join(
+                settings.output_base_dir, get_user_subdir(user_id), "inputs", "focus")
+            if subdir:
+                output_dir = os.path.join(output_dir, subdir)
+        else:
+            output_dir = os.path.join("./inputs")
+        os.makedirs(output_dir, exist_ok=True)
+        try:
+            if not file.filename:
+                file.filename = str(uuid.uuid4())
+            else:
+                file.filename = str(uuid.uuid4()) + file.filename
+            file_path = os.path.join(output_dir, file.filename)
+
+            async with aiofiles.open(file_path, 'wb') as out_file:
+                while content := await file.read(1024):  # Read 1024 bytes at a time
+                    await out_file.write(content)
+
+            return {"filename": file_path}
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"message": str(e)})
 
 
     @app.get('/ui', response_class=HTMLResponse)

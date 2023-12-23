@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@5.8.55/css/materialdesignicons.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Material+Icons">
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css">
+    <link href="https://releases.transloadit.com/uppy/v3.21.0/uppy.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vuetify@3.4.8/dist/vuetify.min.js"></script>
     <style>
@@ -23,6 +24,34 @@
       .preview-image {
         min-width: 500px;
       }
+
+      #uov_image_uploader .uppy-Root {
+        width: 100%;
+      }
+
+      .image-prompt-uploader .uppy-Root {
+        width: 100%;
+      }
+
+      #inpaint-image-uploader .uppy-Root {
+        width: 100%;
+      }
+
+      #inpaint-image-uploader .uppy-Dashboard-inner {
+        margin: auto;
+      }
+
+      #describe-image-uploader .uppy-Root {
+        width: 100%;
+      }
+
+      .describe-image-button .v-btn__content {
+        white-space: normal;
+      }
+
+      .green-shadow {
+        text-shadow: 0px 4px 15px rgba(124, 179, 66, 0.8);
+      }
     </style>
   </head>
   <body>
@@ -32,6 +61,262 @@
           <div class="d-flex text-h1 font-weight-bold">imagine</div>
           <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
         </v-row>
+
+        <v-row class="d-flex pa-3">
+          <v-expansion-panels v-model="panelName" v-show="showImageOptions">
+            <v-expansion-panel value="image_options">
+              <v-expansion-panel-text>
+                <v-tabs vertical v-model="imageOptionTab">
+                  <v-tab value="uov">Upscale or Variation</v-tab>
+                  <v-tab value="ip">Image Prompt</v-tab>
+                  <v-tab value="inpaint">Inpaint or Outpaint</v-tab>
+                  <v-tab value="desc">Describe</v-tab>
+                </v-tabs>
+                <v-window v-model="imageOptionTab">
+                  <v-window-item value="uov" eager>
+                    <v-row>
+                      <v-col
+                        xl="6"
+                        lg="6"
+                        md="8"
+                        sm="12"
+                      >
+                        <div ref="uppyContainer" id="uov_image_uploader" class="d-flex"></div>
+                      </v-col>
+                      <v-col
+                        xl="6"
+                        lg="6"
+                        md="4"
+                        sm="12"
+                      >
+                        <div class="d-flex">
+                          <v-radio-group v-model="uovSelection" label="Upscale or Variation">
+                            <v-radio
+                              v-for="(name, index) in uovMethods"
+                              :label="name"
+                              :value="name">
+                            </v-radio>
+                          </v-radio-group>
+                        </div>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                  <v-window-item value="ip" eager>
+                    <v-row>
+                      <v-col
+                        v-for="index in numImagePrompts"
+                        :key="index"
+                        xl="3"
+                        lg="6"
+                        md="6"
+                        sm="12"
+                      >
+                        <v-card
+                          variant="elevated"
+                        >
+                          <v-card-text class="pa-0">
+                            <div :id="`image_prompts_container_${index}`" class="d-flex image-prompt-uploader"></div>
+                            <v-expansion-panels v-model="imagePromptAdvancedPanel">
+                              <v-expansion-panel value="advanced">
+                                <v-expansion-panel-title>Advanced Options</v-expansion-panel-title>
+                                <v-expansion-panel-text>
+                                  <v-row>
+                                    <v-col>
+                                      <v-slider
+                                        v-model="imagePrompts[index-1].params.stopAt"
+                                        :min="0"
+                                        :max="1"
+                                        :step="0.001"
+                                        label="Stop at"
+                                      >
+                                        <template v-slot:append>
+                                          <v-text-field
+                                            v-model="imagePrompts[index-1].params.stopAt"
+                                            hide-details
+                                            single-line
+                                            density="compact"
+                                            type="number"
+                                            style="width: 70px"
+                                          ></v-text-field>
+                                        </template>
+                                      </v-slider>
+                                    </v-col>
+                                    <v-col>
+                                      <v-slider
+                                        v-model="imagePrompts[index-1].params.weight"
+                                        :min="0"
+                                        :max="2"
+                                        :step="0.001"
+                                        label="Weight"
+                                      >
+                                        <template v-slot:append>
+                                          <v-text-field
+                                            v-model="imagePrompts[index-1].params.weight"
+                                            hide-details
+                                            single-line
+                                            density="compact"
+                                            type="number"
+                                            style="width: 70px"
+                                          ></v-text-field>
+                                        </template>
+                                      </v-slider>
+                                    </v-col>
+                                  </v-row>
+                                  <v-row>
+                                    <v-radio-group v-model="imagePrompts[index-1].params.controlType" inline>
+                                      <v-radio
+                                        v-for="(name, index) in ipTypes"
+                                        :label="name"
+                                        :value="name">
+                                      </v-radio>
+                                    </v-radio-group>
+                                  </v-row>
+                                </v-expansion-panel-text>
+                              </v-expansion-panel>
+                            </v-expansion-panels>
+                          </v-card-text>
+                        </v-card>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                  <v-window-item value="inpaint" eager>
+                    <v-row>
+                      <v-stepper
+                        v-model="inpaintStep"
+                        hide-actions
+                        width="100%"
+                      >
+                        <v-stepper-header>
+                          <v-stepper-item
+                            editable
+                            title="Upload Image"
+                            value="Upload Image"
+                          ></v-stepper-item>
+                          <v-divider></v-divider>
+                          <v-stepper-item
+                            editable
+                            title="Draw Mask"
+                            value="Draw Mask"
+                          ></v-stepper-item>
+                        </v-stepper-header>
+                        <v-stepper-window>
+                          <v-stepper-window-item value="Upload Image" eager>
+                            <div id="inpaint-image-uploader"></div>
+                          </v-stepper-window-item>
+                          <v-stepper-window-item value="Draw Mask" eager>
+                            <div id="inpaint-image-editor" style="height: 600px; width: 100%;"></div>
+                          </v-stepper-window-item>
+                        </v-stepper-window>
+                      </v-stepper>
+                    </v-row>
+                    <v-tabs vertical v-model="inpaintSelection">
+                      <v-tab value="Inpaint or Outpaint (default)">Inpaint or Outpaint (default)</v-tab>
+                      <v-tab value="Improve Detail (face, hand, eyes, etc.)">Improve Detail (face, hand, eyes, etc.)</v-tab>
+                      <v-tab value="Modify Content (add objects, change background, etc.)">Modify Content (add objects, change background, etc.)</v-tab>
+                    </v-tabs>
+                    <v-window v-model="inpaintSelection">
+                      <v-window-item value="Inpaint or Outpaint (default)">
+                        <div class="ma-4">
+                          <v-combobox
+                            v-model="outpaintDirection"
+                            :items="['Left', 'Right', 'Top', 'Bottom']"
+                            label="Outpaint Direction"
+                            multiple
+                            chips
+                            small-chips
+                          ></v-combobox>
+                         </div>
+                      </v-window-item>
+                      <v-window-item value="Improve Detail (face, hand, eyes, etc.)">
+                        <div class="ma-4">
+                          <v-text-field
+                            v-model="inpaintImprovementPrompt"
+                            label="Inpaint Additional Prompt"
+                            clearable
+                            rows="1"
+                            variant="solo-filled"
+                            auto-grow
+                            placeholder="Describing what you want to see at the masks for enhencement."
+                          ></v-text-field>
+                          <span>Prompts Quick List</span>
+                          <v-chip-group v-model="inpaintImprovementPrompt">
+                            <v-chip value="highly detailed face">highly detailed face</v-chip>
+                            <v-chip value="detailed girl face">detailed girl face</v-chip>
+                            <v-chip value="detailed man face">detailed man face</v-chip>
+                            <v-chip value="detailed hand">detailed hand</v-chip>
+                            <v-chip value="beautiful eyes">beautiful eyes</v-chip>
+                          </v-chip-group>
+                        </div>
+                      </v-window-item>
+                      <v-window-item value="Modify Content (add objects, change background, etc.)">
+                        <div class="ma-4">
+                          <v-text-field
+                            v-model="inpaintModificationPrompt"
+                            label="Inpaint Additional Prompt"
+                            clearable
+                            rows="1"
+                            variant="solo-filled"
+                            auto-grow
+                            placeholder="Describing what you want to see at the masks for modification."
+                          ></v-text-field>
+                        </div>
+                      </v-window-item>
+                    </v-window>
+                  </v-window-item>
+                  <v-window-item value="desc" eager>
+                    <v-row>
+                      <v-col
+                        xxl="6"
+                        xl="6"
+                        lg="6"
+                        md="8"
+                        sm="12"
+                        cols="12"
+                      >
+                        <div id="describe-image-uploader"></div>
+                      </v-col>
+                      <v-col
+                        xxl="6"
+                        xl="6"
+                        lg="6"
+                        md="4"
+                        sm="12"
+                        cols="12"
+                      >
+                        <div class="ma-2">
+                          <v-radio-group v-model="contentTypeSelection" label="Content Type" inline>
+                            <v-radio
+                              v-for="(name, index) in contentTypes"
+                              :label="name"
+                              :value="name">
+                            </v-radio>
+                          </v-radio-group>
+                        </div>
+                        <div class="ma-4">
+                          <v-btn
+                            class="describe-image-button"
+                            block
+                            color="grey-lighten-1"
+                            height="48"
+                          >Describe into Prompt (BLIP)</v-btn>
+                        </div>
+                        <div class="ma-4">
+                          <v-btn
+                            class="describe-image-button"
+                            block
+                            color="#5a3cff"
+                            height="48"
+                          >Describe into Prompt (GPT-4)</v-btn>
+                        </div>
+                      </v-col>
+                    </v-row>
+                  </v-window-item>
+                </v-window>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </v-row>
+
         <v-row>
           <v-col
             xxl="9"
@@ -49,7 +334,19 @@
               auto-grow
               placeholder="Describe what you want to see..."
               min-height="56px"
-            ></v-textarea>
+            >
+              <template v-slot:append-inner>
+                <v-btn
+                  :color="showImageOptions? 'light-green-lighten-5': 'grey-lighten-4'"
+                  variant="text"
+                  @click="showImageOptions = showImageOptions? false: true"
+                >
+                  <span
+                    :class="{'material-icons': true, 'green-shadow': showImageOptions}"
+                  >add_photo_alternate</span>
+                </v-btn>
+              </template>
+            </v-textarea>
           </v-col>
           <v-col
             xxl="3"
@@ -404,6 +701,8 @@
       </v-container>
     </div>
 
+    <script src="https://releases.transloadit.com/uppy/v3.21.0/uppy.min.js"></script>
+    <script src="https://scaleflex.cloudimg.io/v7/plugins/filerobot-image-editor/latest/filerobot-image-editor.min.js"></script>
     <script>
       const { createApp } = Vue;
       const { createVuetify } = Vuetify;
@@ -477,9 +776,186 @@
             shareButtonColor: {},
             skipLoading: false,
             stopLoading: false,
+            panelName: 'image_options',
+            showImageOptions: false,
+            imageOptionTab: 'uov',
+            uovSelection: 'Disabled',
+            uovMethods: [],
+            imagePrompts: [],
+            ipTypes: [],
+            numImagePrompts: 4,
+            imagePromptUploaders: [],
+            imagePromptAdvancedPanel: "",
+            contentTypeSelection: "Photograph",
+            contentTypes: [],
+            uovImageUploader: null,
+            describeImageUploader: null,
+            inpainImageUploader: null,
+            inpaintSelection: "Inpaint or Outpaint (default)",
+            outpaintDirection: [],
+            inpaintImprovementPrompt: "",
+            inpaintModificationPrompt: "",
+            inpaintStep: "Upload Image",
+            uovImageFile: "",
           };
         },
         methods: {
+          initializeUppy() {
+            this.uovImageUploader = new Uppy.Uppy({
+              restrictions: {
+                maxFileSize: 10000000, // 10 MB
+                allowedFileTypes: ['image/*'],
+                maxNumberOfFiles: 1,
+              },
+            });
+
+            this.uovImageUploader.use(Uppy.Dashboard, {
+              inline: true,
+              target: "#uov_image_uploader",
+              theme: 'dark',
+              showProgressDetails: true,
+              note: 'One image only, up to 10 MB',
+              height: 480,
+            })
+            .use(Uppy.DropTarget, {
+              target: "#uov_image_uploader"
+            })
+            .use(Uppy.Compressor)
+            .use(Uppy.ImageEditor, { target: Uppy.Dashboard });
+
+            this.uovImageUploader.use(Uppy.XHRUpload, {
+              endpoint: '/api/focus/upload/',
+              formData: true,
+              fieldName: 'file',
+              bundle: true
+            });
+
+            this.uovImageUploader.on('upload-success', (file, response) => {
+              this.uovImageFile = response.filename;
+            });
+            this.uovImageUploader.on('file-removed', (file, reason) => {
+              this.uovImageFile = "";
+            });
+            if (this.imagePromptUploaders.length < this.numImagePrompts) {
+              for (let i = 1; i <= this.numImagePrompts; i++) {
+                let promptImage = new Uppy.Uppy({
+                  restrictions: {
+                    maxFileSize: 10000000, // 10 MB
+                    allowedFileTypes: ['image/*'],
+                    maxNumberOfFiles: 1,
+                  },
+                });
+                promptImage.use(Uppy.Dashboard, {
+                  inline: true,
+                  target: `#image_prompts_container_${i}`,
+                  theme: 'dark',
+                  showProgressDetails: true,
+                  note: 'One image only, up to 10 MB',
+                  height: 480,
+                })
+                .use(Uppy.DropTarget, {
+                  target: `#image_prompts_container_${i}`
+                })
+                .use(Uppy.Compressor)
+                .use(Uppy.ImageEditor, { target: Uppy.Dashboard });
+
+                promptImage.use(Uppy.XHRUpload, {
+                  endpoint: '/api/focus/upload/',
+                  formData: true,
+                  fieldName: 'file',
+                  bundle: true
+                });
+
+                promptImage.on('complete', (result) => {
+                  console.log('Upload complete! We’ve uploaded these files:', result);
+                });
+                this.imagePromptUploaders.push(promptImage);
+              }
+            }
+            this.describeImageUploader = new Uppy.Uppy({
+              restrictions: {
+                maxFileSize: 10000000, // 10 MB
+                allowedFileTypes: ['image/*'],
+                maxNumberOfFiles: 1,
+              },
+            });
+
+            this.describeImageUploader.use(Uppy.Dashboard, {
+              inline: true,
+              target: document.querySelector('#describe-image-uploader'),
+              theme: 'dark',
+              showProgressDetails: true,
+              note: 'One image only, up to 10 MB',
+              height: 480,
+            })
+            .use(Uppy.DropTarget, {
+              target: document.querySelector('#describe-image-uploader')
+            })
+            .use(Uppy.Compressor)
+            .use(Uppy.ImageEditor, { target: Uppy.Dashboard });
+
+            this.describeImageUploader.use(Uppy.XHRUpload, {
+              endpoint: '/api/focus/upload/',
+              formData: true,
+              fieldName: 'file',
+              bundle: true
+            });
+
+            this.describeImageUploader.on('complete', (result) => {
+              console.log('Upload complete! We’ve uploaded these files:', result);
+            });
+
+            this.inpainImageUploader = new Uppy.Uppy({
+              restrictions: {
+                maxFileSize: 10000000, // 10 MB
+                allowedFileTypes: ['image/*'],
+                maxNumberOfFiles: 1,
+              },
+            });
+
+            this.inpainImageUploader.use(Uppy.Dashboard, {
+              inline: true,
+              target: "#inpaint-image-uploader",
+              theme: 'dark',
+              showProgressDetails: true,
+              note: 'One image only, up to 10 MB',
+              height: 480,
+            })
+            .use(Uppy.DropTarget, {
+              target: "#inpaint-image-uploader"
+            })
+            .use(Uppy.Compressor)
+            .use(Uppy.ImageEditor, { target: Uppy.Dashboard });
+
+            this.inpainImageUploader.use(Uppy.XHRUpload, {
+              endpoint: '/api/focus/upload/',
+              formData: true,
+              fieldName: 'file',
+              bundle: true
+            });
+
+            this.inpainImageUploader.on('complete', (result) => {
+              console.log('Upload complete! We’ve uploaded these files:', result);
+            });
+          },
+          initializeFilerobot() {
+            const container = document.getElementById("inpaint-image-editor");
+            const config = {
+              tabsIds: [FilerobotImageEditor.TABS.ANNOTATE, FilerobotImageEditor.TABS.RESIZE],
+              defaultTabId: FilerobotImageEditor.TABS.ANNOTATE,
+              defaultToolId: FilerobotImageEditor.TOOLS.PEN,
+              observePluginContainerSize: true,
+              onBeforeSave: ()=>false,
+              onSave: (imageInfo, designState) => {
+                return false;
+              }
+            };
+            const ImageEditor = new window.FilerobotImageEditor(container, config);
+
+            ImageEditor.render({
+              source: "https://scaleflex.cloudimg.io/v7/demo/river.png",
+            });
+          },
           turnObjParams(obj) {
             return Object.keys(obj).filter(key => obj[key])
               .map(key => {
@@ -498,7 +974,7 @@
               });
           },
           packGenerationParameters() {
-            return {
+            let genParams = {
               prompt: this.prompt,
               negative_prompt: this.negativePrompt,
               style_selections: this.selectedStyles,
@@ -515,6 +991,19 @@
                 lora_weight: this.selectedLoraWeights[index]
               }))
             };
+            if (this.showImageOptions) {
+              if (this.imageOptionTab === "uov") {
+                if (this.uovImageFile) {
+                  genParams.input_image_checkbox = this.showImageOptions;
+                  genParams.current_tab = this.imageOptionTab;
+                  genParams.uov_method = this.uovSelection;
+                  genParams.uov_input_image = {
+                    image_url: `file://${this.uovImageFile}`,
+                  };
+                }
+              }
+            }
+            return genParams;
           },
           startToGenerate(retry = 0) {
             if (retry > 5) {
@@ -814,6 +1303,12 @@
             this.firstLoraName = options.first_lora_name.default;
             this.firstLoraWeight = options.first_lora_weight;
             this.numLoras = options.num_loras;
+            this.uovMethods = options.uovs.options;
+            this.uovSelection = options.uovs.default;
+            this.ipTypes = options.ip_types.options;
+            this.numImagePrompts = options.num_image_prompts;
+            this.contentTypeSelection = options.content_types.default;
+            this.contentTypes = options.content_types.options;
             this.selectedLoraModels = [];
             this.selectedLoraWeights = [];
             for (let i = 0; i < this.numLoras; i++) {
@@ -825,6 +1320,18 @@
                 this.selectedLoraWeights.push(1.0);
               }
             }
+            for (let i = 0; i < this.numImagePrompts; i++) {
+              this.imagePrompts.push({
+                params: {
+                  stopAt: 0.5,
+                  weight: 1.0,
+                  controlType: options.ip_types.default,
+                },
+                image: null,
+              });
+            }
+            this.initializeUppy();
+            this.initializeFilerobot();
           })
           .catch((error) => {
             console.error('Get default value error:', error);
