@@ -52,6 +52,7 @@ from modules.database import (
     share_an_image,
     unshare_an_image,
 )
+from modules import script_callbacks
 
 
 class Settings(BaseSettings):
@@ -754,6 +755,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             print("Client disconnected")
         finally:
             await websocket.close()
+            script_callbacks.after_task_callback(progress.task_id)
 
     @app.post('/api/focus/stop', response_class=JSONResponse)
     async def stop_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):

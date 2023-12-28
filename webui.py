@@ -25,6 +25,7 @@ from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
 from modules.auth import auth_enabled, check_auth
+from modules import script_callbacks
 
 from api import settings, Status, QueuingStatus, Progress, create_api
 
@@ -34,6 +35,7 @@ logger = logging.getLogger("uvicorn.error")
 async def generate_clicked(*args, base_dir: str | None = None):
     import ldm_patched.modules.model_management as model_management
     task_id = str(uuid.uuid4())
+    script_callbacks.before_task_callback(task_id)
 
     with model_management.interrupt_processing_mutex:
         model_management.interrupt_processing = False
@@ -355,6 +357,9 @@ def skip_clicked(task_id: str):
         if task.task_id == task_id:
             return True
     return False
+
+
+script_callbacks.before_ui_callback()
 
 with shared.gradio_root:
     with gr.Row():
@@ -870,12 +875,14 @@ app, _, _ = shared.gradio_root.launch(
 )
 
 app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked)
+script_callbacks.app_started_callback(None, app)
 
 
 async def block_thread():
     logger.info("Starting the async loop and waiting on server")
     try:
         while True:
+            script_callbacks.main_loop_callback()
             await asyncio.sleep(1)
     except (KeyboardInterrupt, OSError):
         logger.info("Keyboard interruption in main thread... closing server.")
