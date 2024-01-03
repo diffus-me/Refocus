@@ -1,15 +1,55 @@
-<div align=center>
-<img src="https://github.com/lllyasviel/Fooocus/assets/19834515/483fb86d-c9a2-4c20-997c-46dafc124f25">
+# Refocus - Alternative ui for Fooocus with many improvements
 
-**Non-cherry-picked** random batch by just typing two words "forest elf", 
+![Refocus UI](https://raw.githubusercontent.com/diffus-me/Refocus/update_readme/assets/20240103-200016.jpeg)
 
-without any parameter tweaking, without any strange prompt tags. 
+## Use in a Virtual Environment
+
+The easiest way to use Refocus is to use a python virtual environment. It has been tested with python 3.10 on Linux, which is recommended.
+
+```bash
+# Clone repo
+git clone git@github.com:diffus-me/Refocus.git
+
+# Create a virtual environment
+cd Refocus
+python3 -m venv fooocus_venv
+
+# Activate the virtual Environment
+source fooocus_venv/bin/Activate
+
+# Install dependencies
+pip install -r requirements_versions.txt
+
+# Run Refocus
+python entry_with_update.py
+```
+
+After started, you can access Refocus VUE UI at [http://localhost:7865/ui](http://localhost:7865/ui)
+
+## Use with a database
+
+If you would like to use the like, favorite and share functionalities, you need to hook a database to Refocus. The easiest way is to use a sqlite database. 
+
+You could specify the database url with the environment variable `SQL_DATABASE_URL`. If you do not specify it, Refocus will create a sqlite database at `./records.db`.
+
+```bash
+export DATABASE_URL = "sqlite+aiosqlite:///./records.db"
+```
+
+You could use any sql database that is supported by sqlalchemy, but you need to change the environment variable `SQL_DATABASE_URL` accordingly.
+
+
+## Original Gradio UI
+
+Original gradio ui is also available at the root path. If you use it on your local machine, it will be [http://localhost:7865](http://localhost:7865)
+
+---
+
+## How Fooocus stands out 
 
 See also **non-cherry-picked** generalization and diversity tests [here](https://github.com/lllyasviel/Fooocus/discussions/2067) and [here](https://github.com/lllyasviel/Fooocus/discussions/808) and [here](https://github.com/lllyasviel/Fooocus/discussions/679) and [here](https://github.com/lllyasviel/Fooocus/discussions/679#realistic).
 
 In the entire open source community, only Fooocus can achieve this level of **non-cherry-picked** quality.
-
-</div>
 
 
 # Fooocus

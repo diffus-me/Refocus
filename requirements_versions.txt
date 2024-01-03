@@ -21,3 +21,4 @@ SQLAlchemy[asyncio]~=2.0.19
 asyncmy~=0.2.8
 pydantic[dotenv]~=1.10.9
 aiofiles~=23.2.1
+aiosqlite~=0.19.0

@@ -388,7 +388,7 @@
                             @click="describeImageLocal"
                           >Describe into Prompt (BLIP)</v-btn>
                         </div>
-                        <div class="ma-4">
+                        <div class="ma-4" v-if="false">
                           <v-btn
                             class="describe-image-button"
                             block
@@ -1352,7 +1352,6 @@
                 mode: this.contentTypeSelection,
                 image: {
                   encoded_image: this.describeImageUploader,
-                },
                 },
               })
             })
