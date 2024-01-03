@@ -9,10 +9,13 @@ from sqlalchemy.orm import DeclarativeBase, mapped_column
 
 config = dotenv_values(".env")
 
-SQLALCHEMY_DATABASE_URL = config.get("SQL_DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = config.get("SQL_DATABASE_URL", "")
 
 if not SQLALCHEMY_DATABASE_URL:
-    SQLALCHEMY_DATABASE_URL = os.environ["SQL_DATABASE_URL"]
+    SQLALCHEMY_DATABASE_URL = os.environ.get("SQL_DATABASE_URL", "")
+
+if not SQLALCHEMY_DATABASE_URL:
+    SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./records.db"
 
 async_engine = create_async_engine(SQLALCHEMY_DATABASE_URL, connect_args={}, pool_pre_ping=True, pool_recycle=3600)
 Session = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine, expire_on_commit=False)
