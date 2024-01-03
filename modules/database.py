@@ -1,30 +1,22 @@
 import os
-from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
-from sqlalchemy import String, Integer, DateTime, Text, func, select
-from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import DeclarativeBase
 from dotenv import dotenv_values
+from sqlalchemy import DateTime, Integer, String, Text, func, select
+from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, mapped_column
+
 config = dotenv_values(".env")
 
-SQLALCHEMY_DATABASE_URL = config.get('SQL_DATABASE_URL')
+SQLALCHEMY_DATABASE_URL = config.get("SQL_DATABASE_URL")
 
 if not SQLALCHEMY_DATABASE_URL:
-    SQLALCHEMY_DATABASE_URL = os.environ['SQL_DATABASE_URL']
+    SQLALCHEMY_DATABASE_URL = os.environ["SQL_DATABASE_URL"]
 
-async_engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={
-    },
-    pool_pre_ping=True,
-    pool_recycle=3600
-)
+async_engine = create_async_engine(SQLALCHEMY_DATABASE_URL, connect_args={}, pool_pre_ping=True, pool_recycle=3600)
 Session = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine, expire_on_commit=False)
+
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -59,20 +51,24 @@ class FocusTaskRecord(Base):
 
 
 async def insert_focus_task_record(
-        session: AsyncSession, user_id: str, task_id: str, status: str, params: str, hostname: str, ip: str) -> FocusTaskRecord:
-    record = FocusTaskRecord(user_id=user_id, task_id=task_id, status=status, params=params, hostname=hostname, server_ip=ip)
+    session: AsyncSession, user_id: str, task_id: str, status: str, params: str, hostname: str, ip: str
+) -> FocusTaskRecord:
+    record = FocusTaskRecord(
+        user_id=user_id, task_id=task_id, status=status, params=params, hostname=hostname, server_ip=ip
+    )
     session.add(record)
     await session.commit()
     return record
 
 
 async def update_focus_task_record(
-        session: AsyncSession,
-        task_id: str,
-        status: str,
-        result: str | None = None,
-        started_at: datetime | None = None,
-        finished_at: datetime | None = None) -> FocusTaskRecord | None:
+    session: AsyncSession,
+    task_id: str,
+    status: str,
+    result: str | None = None,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
+) -> FocusTaskRecord | None:
     statement = select(FocusTaskRecord).where(FocusTaskRecord.task_id == task_id).limit(1)
     query_result = await session.execute(statement)
     record = query_result.scalar_one_or_none()
@@ -91,9 +87,13 @@ async def update_focus_task_record(
 
 
 async def query_focus_task_record_with_status(
-        session: AsyncSession, user_id: str, status: str) -> list[FocusTaskRecord]:
-    statement = select(FocusTaskRecord).where(
-        FocusTaskRecord.user_id == user_id, FocusTaskRecord.status == status).order_by(FocusTaskRecord.created_at.desc())
+    session: AsyncSession, user_id: str, status: str
+) -> list[FocusTaskRecord]:
+    statement = (
+        select(FocusTaskRecord)
+        .where(FocusTaskRecord.user_id == user_id, FocusTaskRecord.status == status)
+        .order_by(FocusTaskRecord.created_at.desc())
+    )
     query_result = await session.execute(statement)
     records = query_result.scalars().all()
     return list(records)
@@ -150,7 +150,9 @@ async def favorite_an_image(session: AsyncSession, user_id: str, image_id: str) 
 
 
 async def unfavorite_an_image(session: AsyncSession, user_id: str, image_id: str) -> ImageFavorite | None:
-    statement = select(ImageFavorite).where(ImageFavorite.user_id == user_id, ImageFavorite.image_id == image_id).limit(1)
+    statement = (
+        select(ImageFavorite).where(ImageFavorite.user_id == user_id, ImageFavorite.image_id == image_id).limit(1)
+    )
     query_result = await session.execute(statement)
     record = query_result.scalar_one_or_none()
     if record:
