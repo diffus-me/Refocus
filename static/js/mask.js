@@ -11,7 +11,7 @@ function drawPoint(ctx, x, y, rotation, scaleX, scaleY, strokeStyle, lineWidth) 
   ctx.restore();
 }
 
-function drawLineSegment(ctx, x1, y1, x2, y2, strokeStyle, lineWidth, lineCap='round') {
+function drawLineSegment(ctx, x1, y1, x2, y2, strokeStyle, lineWidth, lineCap = 'round') {
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
