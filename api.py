@@ -57,10 +57,10 @@ from modules.database import (
 
 
 class Settings(BaseSettings):
-    api_image_dir: str = "/api-outputs"
-    s3_prefix: str = ""
+    api_image_dir: str = "./api-outputs"
+    s3_prefix: str = "http://localhost:7865/file=./api-outputs"
     hostname: str = ""
-    output_base_dir: str = ""
+    output_base_dir: str = "./"
 
     class Config:
         env_file = ".env"
