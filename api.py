@@ -1,57 +1,56 @@
-import logging
-import os
-import json
-import uuid
 import base64
-import io
-import mimetypes
-import imghdr
-import aiohttp
-import aiofiles
-import aiofiles.os
-import hashlib
 import copy
+import hashlib
+import imghdr
+import io
+import json
+import logging
+import mimetypes
+import os
 import socket
-
+import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Callable
-from PIL import Image
-import numpy as np
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, BaseSettings
-
+import aiofiles
+import aiofiles.os
+import aiohttp
+import numpy as np
 from fastapi import (
     FastAPI,
-    Request,
-    WebSocket,
+    File,
     Header,
     HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
     WebSocketDisconnect,
     WebSocketException,
     status,
-    File, 
-    UploadFile)
+)
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from PIL import Image
+from pydantic import BaseModel, BaseSettings, Field
 
+import modules.advanced_parameters as advanced_parameters
 import modules.config
 import modules.flags as flags
-import modules.advanced_parameters as advanced_parameters
 import modules.style_sorter as style_sorter
 from modules.database import (
     create_tables,
+    favorite_an_image,
     get_db,
     insert_focus_task_record,
-    update_focus_task_record,
-    query_focus_task_record_with_status,
     like_an_image,
-    unlike_an_image,
-    favorite_an_image,
-    unfavorite_an_image,
+    query_focus_task_record_with_status,
     share_an_image,
+    unfavorite_an_image,
+    unlike_an_image,
     unshare_an_image,
+    update_focus_task_record,
 )
 
 
@@ -60,7 +59,6 @@ class Settings(BaseSettings):
     s3_prefix: str = ""
     hostname: str = ""
     output_base_dir: str = ""
-
 
     class Config:
         env_file = ".env"
@@ -96,22 +94,27 @@ class Progress(BaseModel):
 
 class LoraConfig(BaseModel):
     lora_model: str = Field(
-        default=modules.config.default_loras[0][0], description=f'LoRA model name. Options are: {["None"] + modules.config.lora_filenames}')
-    lora_weight: float = Field(
-        default=modules.config.default_loras[0][1], description='LoRA weight.')
+        default=modules.config.default_loras[0][0],
+        description=f'LoRA model name. Options are: {["None"] + modules.config.lora_filenames}',
+    )
+    lora_weight: float = Field(default=modules.config.default_loras[0][1], description="LoRA weight.")
 
 
 class ImageSource(BaseModel):
-    image_url: str | None = Field(default=None, description=(
-        "The url to the image. "
-        "image_url and encoded_image at least one must be provided."))
-    encoded_image: str | None = Field(default=None, description=(
-        "Base64 encoded image. "
-        "If both image_url and encoded_image are provided, encoded_image will be used."))
+    image_url: str | None = Field(
+        default=None,
+        description=("The url to the image. " "image_url and encoded_image at least one must be provided."),
+    )
+    encoded_image: str | None = Field(
+        default=None,
+        description=(
+            "Base64 encoded image. " "If both image_url and encoded_image are provided, encoded_image will be used."
+        ),
+    )
 
 
 class ImageResult(ImageSource):
-    image_id: str = Field(description='Image id.')
+    image_id: str = Field(description="Image id.")
 
 
 class RemoteImageSource(ImageSource):
@@ -119,205 +122,221 @@ class RemoteImageSource(ImageSource):
 
 
 class ControlConfig(BaseModel):
-    ip_image: ImageSource | None = Field(
-        default=None, description='Image prompt for generation.')
-    ip_stop: float = Field(
-        default=flags.default_parameters[flags.default_ip][0], description='Stop at for controlnet.')
+    ip_image: ImageSource | None = Field(default=None, description="Image prompt for generation.")
+    ip_stop: float = Field(default=flags.default_parameters[flags.default_ip][0], description="Stop at for controlnet.")
     ip_weight: float = Field(
-        default=flags.default_parameters[flags.default_ip][1], description='Weight for controlnet.')
-    ip_type: str = Field(
-        default=flags.default_ip, description=f'Image prompt type. Options are: {flags.ip_list}')
+        default=flags.default_parameters[flags.default_ip][1], description="Weight for controlnet."
+    )
+    ip_type: str = Field(default=flags.default_ip, description=f"Image prompt type. Options are: {flags.ip_list}")
 
 
 class InpaintInputImage(BaseModel):
-    image: ImageSource = Field(description='Image for inpaint.')
-    mask: ImageSource = Field(description='Mask for inpaint.')
+    image: ImageSource = Field(description="Image for inpaint.")
+    mask: ImageSource = Field(description="Mask for inpaint.")
 
 
 class AdvancedOptions(BaseModel):
-    disable_preview: bool = Field(
-        default=False, description='Disable preview during generation.')
+    disable_preview: bool = Field(default=False, description="Disable preview during generation.")
     adm_scaler_positive: float = Field(
-        default=1.5, description='The scaler multiplied to positive ADM (use 1.0 to disable). ')
+        default=1.5, description="The scaler multiplied to positive ADM (use 1.0 to disable). "
+    )
     adm_scaler_negative: float = Field(
-        default=0.8, description='The scaler multiplied to negative ADM (use 1.0 to disable). ')
-    adm_scaler_end: float = Field(
-        default=0.3, description='When to end the guidance from positive/negative ADM. ')
+        default=0.8, description="The scaler multiplied to negative ADM (use 1.0 to disable). "
+    )
+    adm_scaler_end: float = Field(default=0.3, description="When to end the guidance from positive/negative ADM. ")
     adaptive_cfg: float = Field(
-        default=modules.config.default_cfg_tsnr, description='Enabling Fooocus\'s implementation of CFG mimicking for TSNR (effective when real CFG > mimicked CFG).')
+        default=modules.config.default_cfg_tsnr,
+        description="Enabling Fooocus's implementation of CFG mimicking for TSNR (effective when real CFG > mimicked CFG).",
+    )
     sampler_name: str = Field(
-        default=modules.config.default_sampler, description=f'Sampler. Options are: {flags.sampler_list}')
+        default=modules.config.default_sampler, description=f"Sampler. Options are: {flags.sampler_list}"
+    )
     scheduler_name: str = Field(
-        default=modules.config.default_scheduler, description=f'Scheduler. Options are: {flags.scheduler_list}')
+        default=modules.config.default_scheduler, description=f"Scheduler. Options are: {flags.scheduler_list}"
+    )
     generate_image_grid: bool = Field(
-        default=False, description='(Experimental) This may cause performance problems on some computers and certain internet conditions.')
+        default=False,
+        description="(Experimental) This may cause performance problems on some computers and certain internet conditions.",
+    )
     overwrite_step: int = Field(
-        default=modules.config.default_overwrite_step, description='Forced Overwrite of Sampling Step. Set as -1 to disable. For developer debugging.')
+        default=modules.config.default_overwrite_step,
+        description="Forced Overwrite of Sampling Step. Set as -1 to disable. For developer debugging.",
+    )
     overwrite_switch: int = Field(
-        default=modules.config.default_overwrite_switch, description='Forced Overwrite of Refiner Switch Step. Set as -1 to disable. For developer debugging.')
+        default=modules.config.default_overwrite_switch,
+        description="Forced Overwrite of Refiner Switch Step. Set as -1 to disable. For developer debugging.",
+    )
     overwrite_width: int = Field(
-        default=-1, description='Forced Overwrite of Generating Width. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.')
+        default=-1,
+        description="Forced Overwrite of Generating Width. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.",
+    )
     overwrite_height: int = Field(
-        default=-1, description='Forced Overwrite of Generating Height. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.')
+        default=-1,
+        description="Forced Overwrite of Generating Height. Set as -1 to disable. For developer debugging. Results will be worse for non-standard numbers that SDXL is not trained on.",
+    )
     overwrite_vary_strength: float = Field(
-        default=-1, description='Forced Overwrite of Denoising Strength of "Vary". Set as negative number to disable. For developer debugging.')
+        default=-1,
+        description='Forced Overwrite of Denoising Strength of "Vary". Set as negative number to disable. For developer debugging.',
+    )
     overwrite_upscale_strength: float = Field(
-        default=-1, description='Forced Overwrite of Denoising Strength of "Upscale". Set as negative number to disable. For developer debugging.')
+        default=-1,
+        description='Forced Overwrite of Denoising Strength of "Upscale". Set as negative number to disable. For developer debugging.',
+    )
     mixing_image_prompt_and_vary_upscale: bool = Field(
-        default=False, description='Mixing Image Prompt and Vary/Upscale')
-    mixing_image_prompt_and_inpaint: bool = Field(
-        default=False, description='Mixing Image Prompt and Inpaint')
-    debugging_cn_preprocessor: bool = Field(
-        default=False, description='Debug Preprocessors')
-    skipping_cn_preprocessor: bool = Field(
-        default=False, description='Skip Preprocessors')
+        default=False, description="Mixing Image Prompt and Vary/Upscale"
+    )
+    mixing_image_prompt_and_inpaint: bool = Field(default=False, description="Mixing Image Prompt and Inpaint")
+    debugging_cn_preprocessor: bool = Field(default=False, description="Debug Preprocessors")
+    skipping_cn_preprocessor: bool = Field(default=False, description="Skip Preprocessors")
     controlnet_softness: float = Field(
-        default=0.25, description='Similar to the Control Mode in A1111 (use 0.0 to disable). ')
-    canny_low_threshold: int = Field(
-        default=64, description='Canny Low Threshold')
-    canny_high_threshold: int = Field(
-        default=128, description='Canny High Threshold')
-    refiner_swap_method: str = Field(
-        default='joint', description='Refiner swap method')
-    freeu_enabled: bool = Field(
-        default=False, description='Enabled')
-    freeu_b1: float = Field(
-        default=1.01, description='B1')
-    freeu_b2: float = Field(
-        default=1.02, description='B2')
-    freeu_s1: float = Field(
-        default=0.99, description='S1')
-    freeu_s2: float = Field(
-        default=0.95, description='S2')
-    debugging_inpaint_preprocessor: bool = Field(
-        default=False, description='Debug Inpaint Preprocessing')
-    inpaint_disable_initial_latent: bool = Field(
-        default=False, description='Disable initial latent in inpaint')
+        default=0.25, description="Similar to the Control Mode in A1111 (use 0.0 to disable). "
+    )
+    canny_low_threshold: int = Field(default=64, description="Canny Low Threshold")
+    canny_high_threshold: int = Field(default=128, description="Canny High Threshold")
+    refiner_swap_method: str = Field(default="joint", description="Refiner swap method")
+    freeu_enabled: bool = Field(default=False, description="Enabled")
+    freeu_b1: float = Field(default=1.01, description="B1")
+    freeu_b2: float = Field(default=1.02, description="B2")
+    freeu_s1: float = Field(default=0.99, description="S1")
+    freeu_s2: float = Field(default=0.95, description="S2")
+    debugging_inpaint_preprocessor: bool = Field(default=False, description="Debug Inpaint Preprocessing")
+    inpaint_disable_initial_latent: bool = Field(default=False, description="Disable initial latent in inpaint")
     inpaint_engine: str = Field(
-        default=modules.config.default_inpaint_engine_version, description=f'Inpaint Engine. Options are: {flags.inpaint_engine_versions}')
+        default=modules.config.default_inpaint_engine_version,
+        description=f"Inpaint Engine. Options are: {flags.inpaint_engine_versions}",
+    )
     inpaint_strength: float = Field(
-        default=1.0, description='Inpaint Denoising Strength. Same as the denoising strength in A1111 inpaint. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)')
+        default=1.0,
+        description="Inpaint Denoising Strength. Same as the denoising strength in A1111 inpaint. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)",
+    )
     inpaint_respective_field: float = Field(
-        default=0.618, description='Inpaint Respective Field. The area to inpaint. Value 0 is same as "Only Masked" in A1111. Value 1 is same as "Whole Image" in A1111. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)')
-    inpaint_mask_upload_checkbox: bool = Field(
-        default=False, description='Enable Mask Upload.')
-    invert_mask_checkbox: bool = Field(
-        default=False, description='Invert Mask.')
+        default=0.618,
+        description='Inpaint Respective Field. The area to inpaint. Value 0 is same as "Only Masked" in A1111. Value 1 is same as "Whole Image" in A1111. Only used in inpaint, not used in outpaint. (Outpaint always use 1.0)',
+    )
+    inpaint_mask_upload_checkbox: bool = Field(default=False, description="Enable Mask Upload.")
+    invert_mask_checkbox: bool = Field(default=False, description="Invert Mask.")
     inpaint_erode_or_dilate: int = Field(
-        default=0, description=(
-            'Mask Erode or Dilate.'
-            'Positive value will make white area in the mask larger, '
-            'negative value will make white area smaller.'
-            '(default is 0, always process before any mask invert)'
-        ))
+        default=0,
+        description=(
+            "Mask Erode or Dilate."
+            "Positive value will make white area in the mask larger, "
+            "negative value will make white area smaller."
+            "(default is 0, always process before any mask invert)"
+        ),
+    )
 
 
 class GenerationOption(BaseModel):
-    prompt: str = Field(description='Prompt for generation.')
+    prompt: str = Field(description="Prompt for generation.")
     negative_prompt: str = Field(
-        default=modules.config.default_prompt_negative, description='Negative prompt for generation.')
+        default=modules.config.default_prompt_negative, description="Negative prompt for generation."
+    )
     style_selections: list[str] = Field(
-        default=copy.deepcopy(modules.config.default_styles), description=f'Styles for generation. Options are: {copy.deepcopy(style_sorter.all_styles)}')
+        default=copy.deepcopy(modules.config.default_styles),
+        description=f"Styles for generation. Options are: {copy.deepcopy(style_sorter.all_styles)}",
+    )
     performance_selection: str = Field(
-        default=modules.config.default_performance, description=f'Performance for generation. Options are: {flags.performance_selections}')
+        default=modules.config.default_performance,
+        description=f"Performance for generation. Options are: {flags.performance_selections}",
+    )
     aspect_ratios_selection: str = Field(
-        default=modules.config.default_aspect_ratio, description=f'width × height. Options are: {modules.config.available_aspect_ratios}')
-    image_number: int = Field(
-        default=modules.config.default_image_number, description='Number of images to generate.')
-    image_seed: int = Field(
-        default=-1, description='Seed for generation. -1 means random.')
+        default=modules.config.default_aspect_ratio,
+        description=f"width × height. Options are: {modules.config.available_aspect_ratios}",
+    )
+    image_number: int = Field(default=modules.config.default_image_number, description="Number of images to generate.")
+    image_seed: int = Field(default=-1, description="Seed for generation. -1 means random.")
     sharpness: float = Field(
         default=modules.config.default_sample_sharpness,
-        description='Image Sharpness. Higher value means image and texture are sharper. Min 0.0, Max 30.0.')
+        description="Image Sharpness. Higher value means image and texture are sharper. Min 0.0, Max 30.0.",
+    )
     guidance_scale: float = Field(
         default=modules.config.default_cfg_scale,
-        description='Guidance Scale. Higher value means style is cleaner, vivider, and more artistic. Min 1.0, Max 30.0.')
+        description="Guidance Scale. Higher value means style is cleaner, vivider, and more artistic. Min 1.0, Max 30.0.",
+    )
     base_model: str = Field(
         default=modules.config.default_base_model_name,
-        description=f'Base Model (SDXL only). Options are: {modules.config.model_filenames}')
+        description=f"Base Model (SDXL only). Options are: {modules.config.model_filenames}",
+    )
     refiner_model: str = Field(
         default=modules.config.default_refiner_model_name,
-        description=f'Refiner (SDXL or SD 1.5). Options are: {modules.config.model_filenames}')
+        description=f"Refiner (SDXL or SD 1.5). Options are: {modules.config.model_filenames}",
+    )
     refiner_switch: float = Field(
         default=modules.config.default_refiner_switch,
-        description='Refiner Switch At. Use 0.4 for SD1.5 realistic models; or 0.667 for SD1.5 anime models; or 0.8 for XL-refiners; or any value for switching two SDXL models. Min 0.1, Max 1.0.')
-    loras: list[LoraConfig] = Field(
-        default=[], description='LoRA configs.')
-    input_image_checkbox: bool = Field(
-        default=False, description='Whether to use input image.')
-    current_tab: str = Field(
-        default='uov', description='Current tab.')
-    uov_method: str = Field(
-        default=flags.disabled, description=f'Upscale or Variation. Options are: {flags.uov_list}')
+        description="Refiner Switch At. Use 0.4 for SD1.5 realistic models; or 0.667 for SD1.5 anime models; or 0.8 for XL-refiners; or any value for switching two SDXL models. Min 0.1, Max 1.0.",
+    )
+    loras: list[LoraConfig] = Field(default=[], description="LoRA configs.")
+    input_image_checkbox: bool = Field(default=False, description="Whether to use input image.")
+    current_tab: str = Field(default="uov", description="Current tab.")
+    uov_method: str = Field(default=flags.disabled, description=f"Upscale or Variation. Options are: {flags.uov_list}")
     uov_input_image: ImageSource | None = Field(
-        default=None, description='Input image for upscale, variation or image prompt.')
+        default=None, description="Input image for upscale, variation or image prompt."
+    )
     outpaint_selections: list[str] = Field(
-        default=[], description="Outpaint directions. 'Left', 'Right', 'Top', 'Bottom'")
-    inpaint_input_image: InpaintInputImage | None = Field(
-        default=None, description='Input image for inpaint.')
-    inpaint_additional_prompt: str = Field(
-        default='', description='Describe what you want to inpaint.')
-    inpaint_mask_image: ImageSource | None = Field(
-        default=None, description='Mask image for inpaint.')
-    ip_ctrls: list[ControlConfig] = Field(
-        default=[], description='ControlNet configs.')
+        default=[], description="Outpaint directions. 'Left', 'Right', 'Top', 'Bottom'"
+    )
+    inpaint_input_image: InpaintInputImage | None = Field(default=None, description="Input image for inpaint.")
+    inpaint_additional_prompt: str = Field(default="", description="Describe what you want to inpaint.")
+    inpaint_mask_image: ImageSource | None = Field(default=None, description="Mask image for inpaint.")
+    ip_ctrls: list[ControlConfig] = Field(default=[], description="ControlNet configs.")
     advanced_options: AdvancedOptions = Field(
-        default=AdvancedOptions(), description='Advanced settings for generation.')
+        default=AdvancedOptions(), description="Advanced settings for generation."
+    )
 
 
 class FocusTask(BaseModel):
-    task_id: str = Field(description='Task uuid.')
-    status: str = Field(description='Status of the current task.')
-    created_at: datetime = Field(description='Created time of the current task.')
+    task_id: str = Field(description="Task uuid.")
+    status: str = Field(description="Status of the current task.")
+    created_at: datetime = Field(description="Created time of the current task.")
 
 
 class FocusTasks(BaseModel):
-    tasks: list[FocusTask] = Field(default=[], description='Tasks of the current user.')
+    tasks: list[FocusTask] = Field(default=[], description="Tasks of the current user.")
 
 
 class OptionList(BaseModel):
-    options: list[str] = Field(default=[], description='Options for the field.')
-    default: str | None = Field(default=None, description='Default value for the field.')
-    default_list: list[str] = Field(default=[], description='Default value list for the field.')
+    options: list[str] = Field(default=[], description="Options for the field.")
+    default: str | None = Field(default=None, description="Default value for the field.")
+    default_list: list[str] = Field(default=[], description="Default value list for the field.")
 
 
 class DefaultOptions(BaseModel):
-    hostname: str = Field(description='Base url of the websocket.')
-    performances: OptionList = Field(description='Performance options.')
-    aspect_ratios: OptionList = Field(description='Aspect ratio options.')
-    styles: OptionList = Field(description='Style options.')
-    base_models: OptionList = Field(description='Avaialable SD checkpoints.')
-    refiner_models: OptionList = Field(description='Avaialable refiners.')
-    first_lora_name: OptionList = Field(description='First Lora Name.')
-    first_lora_weight: float = Field(description='First Lora Weight.')
-    num_loras: int = Field(description='Number of Loras.')
-    uovs: OptionList = Field(description='Upscale or variation options.')
-    ip_types: OptionList = Field(description='Image prompt Control Types.')
-    num_image_prompts: int = Field(description='Number of image prompts.')
-    content_types: OptionList = Field(description='Content types for describe image.')
+    hostname: str = Field(description="Base url of the websocket.")
+    performances: OptionList = Field(description="Performance options.")
+    aspect_ratios: OptionList = Field(description="Aspect ratio options.")
+    styles: OptionList = Field(description="Style options.")
+    base_models: OptionList = Field(description="Avaialable SD checkpoints.")
+    refiner_models: OptionList = Field(description="Avaialable refiners.")
+    first_lora_name: OptionList = Field(description="First Lora Name.")
+    first_lora_weight: float = Field(description="First Lora Weight.")
+    num_loras: int = Field(description="Number of Loras.")
+    uovs: OptionList = Field(description="Upscale or variation options.")
+    ip_types: OptionList = Field(description="Image prompt Control Types.")
+    num_image_prompts: int = Field(description="Number of image prompts.")
+    content_types: OptionList = Field(description="Content types for describe image.")
 
 
 class Like(BaseModel):
-    image_id: str = Field(description='Image id.')
-    like: bool = Field(description='Like or unlike the image.')
+    image_id: str = Field(description="Image id.")
+    like: bool = Field(description="Like or unlike the image.")
 
 
 class Favorite(BaseModel):
-    image_id: str = Field(description='Image id.')
-    favorite: bool = Field(description='Favorite or unfavorite the image.')
+    image_id: str = Field(description="Image id.")
+    favorite: bool = Field(description="Favorite or unfavorite the image.")
 
 
 class Share(BaseModel):
-    image_id: str = Field(description='Image id.')
-    share: bool = Field(description='Share or unshare the image.')
+    image_id: str = Field(description="Image id.")
+    share: bool = Field(description="Share or unshare the image.")
 
 
 def encode_filepath_with_base64(filepath: str) -> str:
-    return base64.b64encode(filepath.encode('utf-8')).decode('utf-8')
+    return base64.b64encode(filepath.encode("utf-8")).decode("utf-8")
 
 
 def decode_filepath_from_base64(encoded_filepath: str) -> str:
-    return base64.b64decode(encoded_filepath.encode('utf-8')).decode('utf-8')
+    return base64.b64decode(encoded_filepath.encode("utf-8")).decode("utf-8")
 
 
 def is_base64_image(img_str: str) -> tuple[bool, str, int | None, int | None, str | None]:
@@ -354,17 +373,18 @@ def is_base64_image(img_str: str) -> tuple[bool, str, int | None, int | None, st
 
 
 async def download_image(
-        session: aiohttp.ClientSession,
-        url: str,
-        output_path: str,
-        headers: dict[str, str] = dict(),
-        append_ext: bool = False) -> tuple[str | None, str | None]:
+    session: aiohttp.ClientSession,
+    url: str,
+    output_path: str,
+    headers: dict[str, str] = dict(),
+    append_ext: bool = False,
+) -> tuple[str | None, str | None]:
     if url.startswith("file://"):
         output_path = url.removeprefix("file://")
         if os.path.exists(output_path):
-            async with aiofiles.open(output_path, mode='rb') as f:
+            async with aiofiles.open(output_path, mode="rb") as f:
                 data = await f.read()
-            return output_path, base64.b64encode(data).decode('utf-8')
+            return output_path, base64.b64encode(data).decode("utf-8")
         else:
             logger.error(f"Download failed for image {url} with status code 404: File not found")
             return None, None
@@ -380,9 +400,9 @@ async def download_image(
                     ext = mimetypes.guess_extension(content_type)
                     if ext and (not output_path.endswith(ext)):
                         output_path = f"{output_path}{ext}"
-                async with aiofiles.open(output_path, mode='wb') as f:
+                async with aiofiles.open(output_path, mode="wb") as f:
                     await f.write(data)
-                return output_path, base64.b64encode(data).decode('utf-8')
+                return output_path, base64.b64encode(data).decode("utf-8")
         try:
             resp_message = await resp.text()
             logger.error(f"Download failed for image {url} with status code {resp.status}: {resp_message}")
@@ -402,7 +422,7 @@ async def save_base64_image_to_file(encoded_image: str, output_path: str) -> str
     if not await aiofiles.os.path.exists(output_dir):
         await aiofiles.os.makedirs(output_dir, exist_ok=True)
     decoded_image = base64.b64decode(remove_schema(encoded_image))
-    async with aiofiles.open(output_path, 'wb') as f:
+    async with aiofiles.open(output_path, "wb") as f:
         await f.write(decoded_image)
     return output_path
 
@@ -414,7 +434,7 @@ async def save_numpy_image_to_file(np_image: np.ndarray, output_path: str, forma
     image = Image.fromarray(np_image)
     buffer = io.BytesIO()
     image.save(buffer, format=format)
-    async with aiofiles.open(output_path, 'wb') as f:
+    async with aiofiles.open(output_path, "wb") as f:
         await f.write(buffer.getvalue())
     return output_path
 
@@ -432,17 +452,16 @@ def get_exception(exception_class: Callable, status_code: int, msg: str) -> WebS
 
 
 async def verify_image(
-        session: aiohttp.ClientSession,
-        image: ImageSource,
-        user_id: str,
-        with_schema: bool = False,
-        subdir: str | None = None,
-        exception: Callable = WebSocketException) -> RemoteImageSource:
+    session: aiohttp.ClientSession,
+    image: ImageSource,
+    user_id: str,
+    with_schema: bool = False,
+    subdir: str | None = None,
+    exception: Callable = WebSocketException,
+) -> RemoteImageSource:
     if not image.image_url and not image.encoded_image:
         raise get_exception(
-            exception,
-            status_code=400,
-            msg="Either image_url or encoded_image must be provided for init_img."
+            exception, status_code=400, msg="Either image_url or encoded_image must be provided for init_img."
         )
     image_name = str(uuid.uuid4())
     local_image = RemoteImageSource()
@@ -452,25 +471,15 @@ async def verify_image(
         output_path = f"{settings.api_image_dir}/{user_id}/{image_name}"
     if image.image_url and not image.encoded_image:
         local_image.image_filepath, local_image.encoded_image = await download_image(
-            session,
-            image.image_url,
-            output_path,
-            append_ext=True)
-    if not local_image.encoded_image and not image.encoded_image:
-        raise get_exception(
-            exception,
-            status_code=400,
-            msg=f"Failed to download image from {image.image_url}."
+            session, image.image_url, output_path, append_ext=True
         )
+    if not local_image.encoded_image and not image.encoded_image:
+        raise get_exception(exception, status_code=400, msg=f"Failed to download image from {image.image_url}.")
     mime = None
     if image.encoded_image:
         is_img, image.encoded_image, _, _, mime = is_base64_image(image.encoded_image)
         if not is_img:
-            raise get_exception(
-                exception,
-                status_code=400,
-                msg="Failed to decode image from encoded_image str."
-            )
+            raise get_exception(exception, status_code=400, msg="Failed to decode image from encoded_image str.")
         local_image.encoded_image = image.encoded_image
         if mime:
             ext = mimetypes.guess_extension(mime)
@@ -481,11 +490,7 @@ async def verify_image(
         if mime is None and local_image.image_filepath:
             mime, _ = mimetypes.guess_type(local_image.image_filepath)
         if mime is None:
-            raise get_exception(
-                exception,
-                status_code=400,
-                msg="Failed to detect the mime type of image."
-            )
+            raise get_exception(exception, status_code=400, msg="Failed to detect the mime type of image.")
         image.encoded_image = f"data:{mime};base64,{image.encoded_image}"
     return local_image
 
@@ -495,7 +500,7 @@ def base64_to_numpy_array(base64_str: str) -> np.ndarray:
     Convert a base64 encoded image with a prefix to a NumPy array.
     """
     # Find the start of the base64 string
-    base64_str = base64_str.split(',')[-1]
+    base64_str = base64_str.split(",")[-1]
 
     # Decode the base64 string
     image_data = base64.b64decode(base64_str)
@@ -504,7 +509,7 @@ def base64_to_numpy_array(base64_str: str) -> np.ndarray:
     image = Image.open(io.BytesIO(image_data))
 
     # Convert the PIL image to RGB mode, dropping the alpha channel if present
-    image = image.convert('RGB')
+    image = image.convert("RGB")
 
     # Convert the PIL image to a NumPy array
     numpy_array = np.array(image)
@@ -512,7 +517,7 @@ def base64_to_numpy_array(base64_str: str) -> np.ndarray:
     return numpy_array
 
 
-def numpy_array_to_base64(numpy_array: np.ndarray, format='JPEG', with_schema: bool = False) -> str:
+def numpy_array_to_base64(numpy_array: np.ndarray, format="JPEG", with_schema: bool = False) -> str:
     """
     Convert a NumPy array to a base64 encoded image.
 
@@ -537,7 +542,7 @@ def numpy_array_to_base64(numpy_array: np.ndarray, format='JPEG', with_schema: b
     image_bytes = buffer.getvalue()
 
     # Encode the bytes to base64 and return
-    base64_str = base64.b64encode(image_bytes).decode('utf-8')
+    base64_str = base64.b64encode(image_bytes).decode("utf-8")
 
     if with_schema:
         return f"data:image/{format.lower()};base64,{base64_str}"
@@ -585,25 +590,27 @@ def convert_advanced_options_to_list(advanced_options: AdvancedOptions) -> list:
 
 
 class GenerationProgress(BaseModel):
-    task_id: str = Field(description='Task uuid.')
-    status: str = Field(description='Status of the current task.')
-    progress: int = Field(default=0, description='Progress of the current task. From 0 ~ 100')
-    message: str = Field(default="", description='Message of the current task.')
-    is_url: bool = Field(default=False, description='Whether the result is a url.')
-    images: list[ImageResult] = Field(default=[], description='Preview or result images')
-    queue_length: int | None = Field(default=None, description='Queue length of the current task.')
-    queue_position: int | None = Field(default=None, description='Queue position of the current task.')
+    task_id: str = Field(description="Task uuid.")
+    status: str = Field(description="Status of the current task.")
+    progress: int = Field(default=0, description="Progress of the current task. From 0 ~ 100")
+    message: str = Field(default="", description="Message of the current task.")
+    is_url: bool = Field(default=False, description="Whether the result is a url.")
+    images: list[ImageResult] = Field(default=[], description="Preview or result images")
+    queue_length: int | None = Field(default=None, description="Queue length of the current task.")
+    queue_position: int | None = Field(default=None, description="Queue position of the current task.")
 
 
 def get_user_subdir(user_id: str) -> str:
     h = hashlib.sha256()
-    h.update(user_id.encode('utf-8'))
+    h.update(user_id.encode("utf-8"))
     encoded_user_path = h.hexdigest()
     # same user data in 4 level folders, to prevent a folder has too many subdir
     return f"{encoded_user_path[:2]}/{encoded_user_path[2:4]}/{encoded_user_path[4:6]}/{encoded_user_path}"
 
 
-async def process_result_images(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> list[ImageResult]:
+async def process_result_images(
+    progress: Progress, is_url: bool, user_id: str, start_time: datetime
+) -> list[ImageResult]:
     images = []
     if progress.status.images:
         for idx, image in enumerate(progress.status.images):
@@ -615,14 +622,16 @@ async def process_result_images(progress: Progress, is_url: bool, user_id: str, 
                     rel_filepath = os.path.join(
                         "fooocus/outputs/",
                         get_user_subdir(user_id),
-                        f"{start_time.strftime('%Y-%m-%d')}/{progress.task_id}-{progress.flag}-{progress.status.percentage}-{idx}.jpeg"
+                        f"{start_time.strftime('%Y-%m-%d')}/{progress.task_id}-{progress.flag}-{progress.status.percentage}-{idx}.jpeg",
                     )
                     output_path = f"{settings.api_image_dir}/{rel_filepath}"
                     output_url = f"{settings.s3_prefix}/{rel_filepath}"
                     await save_numpy_image_to_file(image, output_path)
                     images.append(ImageResult(image_url=output_url, image_id=image_id))
                 else:
-                    images.append(ImageResult(encoded_image=numpy_array_to_base64(image, with_schema=True), image_id=image_id))
+                    images.append(
+                        ImageResult(encoded_image=numpy_array_to_base64(image, with_schema=True), image_id=image_id)
+                    )
     return images
 
 
@@ -643,7 +652,7 @@ async def extract_progress(progress: Progress, is_url: bool, user_id: str, start
         is_url=is_url,
         images=images,
         queue_length=queue_length,
-        queue_position=queue_position
+        queue_position=queue_position,
     )
 
 
@@ -660,7 +669,9 @@ def strip_encoded_image_from_generation_option(generation_params: GenerationOpti
     return generation_params
 
 
-async def update_database(progress: Progress, previous_status: str | None, user_id: str, generation_params: GenerationOption | None = None) -> str:
+async def update_database(
+    progress: Progress, previous_status: str | None, user_id: str, generation_params: GenerationOption | None = None
+) -> str:
     async with get_db() as db:
         if previous_status is None and generation_params is not None:
             hostname = socket.gethostname()
@@ -672,14 +683,15 @@ async def update_database(progress: Progress, previous_status: str | None, user_
                 progress.flag,
                 strip_encoded_image_from_generation_option(generation_params).json(),
                 hostname,
-                server_ip)
+                server_ip,
+            )
         if previous_status != progress.flag:
             if progress.flag == "finish":
                 await update_focus_task_record(
-                    db, progress.task_id, progress.flag, json.dumps(progress.status.image_filepaths))
+                    db, progress.task_id, progress.flag, json.dumps(progress.status.image_filepaths)
+                )
             else:
-                await update_focus_task_record(
-                    db, progress.task_id, progress.flag)
+                await update_focus_task_record(db, progress.task_id, progress.flag)
     return progress.flag
 
 
@@ -704,8 +716,14 @@ def get_hostname(request: Request, hostname_from_setting: str) -> str:
     return ""
 
 
-def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable, recover_task: Callable, stop_clicked: Callable, skip_clicked: Callable) -> FastAPI:
-
+def create_api(
+    app: FastAPI,
+    generate_clicked: Callable,
+    refresh_seed: Callable,
+    recover_task: Callable,
+    stop_clicked: Callable,
+    skip_clicked: Callable,
+) -> FastAPI:
     app.mount("/api/focus/static", StaticFiles(directory="static"), name="static")
 
     templates = Jinja2Templates(directory="templates", autoescape=False, auto_reload=True)
@@ -729,14 +747,21 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                         config.ip_ctrls[i].ip_image = image_source
                         if image_source.encoded_image:
                             image_np = base64_to_numpy_array(image_source.encoded_image)
-                            ip_ctrls += [image_np, config.ip_ctrls[i].ip_stop, config.ip_ctrls[i].ip_weight, config.ip_ctrls[i].ip_type]
+                            ip_ctrls += [
+                                image_np,
+                                config.ip_ctrls[i].ip_stop,
+                                config.ip_ctrls[i].ip_weight,
+                                config.ip_ctrls[i].ip_type,
+                            ]
                             continue
                 default_end, default_weight = flags.default_parameters[flags.default_ip]
                 ip_ctrls += [None, default_end, default_weight, flags.default_ip]
 
             uov_input_image = None
             if config.uov_input_image:
-                uov_input_image_source = await verify_image(http_session, config.uov_input_image, user_id, subdir="fooocus/inputs")
+                uov_input_image_source = await verify_image(
+                    http_session, config.uov_input_image, user_id, subdir="fooocus/inputs"
+                )
                 config.uov_input_image = uov_input_image_source
                 if uov_input_image_source.encoded_image:
                     uov_input_image = base64_to_numpy_array(uov_input_image_source.encoded_image)
@@ -745,10 +770,12 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             inpaint_mask = None
             if config.inpaint_input_image:
                 inpaint_input_image_source = await verify_image(
-                    http_session, config.inpaint_input_image.image, user_id, subdir="fooocus/inputs")
+                    http_session, config.inpaint_input_image.image, user_id, subdir="fooocus/inputs"
+                )
                 config.inpaint_input_image.image = inpaint_input_image_source
                 inpaint_mask_source = await verify_image(
-                    http_session, config.inpaint_input_image.mask, user_id, subdir="fooocus/inputs")
+                    http_session, config.inpaint_input_image.mask, user_id, subdir="fooocus/inputs"
+                )
                 config.inpaint_input_image.mask = inpaint_mask_source
                 if inpaint_input_image_source.encoded_image:
                     inpaint_input_image = base64_to_numpy_array(inpaint_input_image_source.encoded_image)
@@ -757,7 +784,9 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
 
             inpaint_mask_image = None
             if config.inpaint_mask_image:
-                inpaint_mask_image_source = await verify_image(http_session, config.inpaint_mask_image, user_id, subdir="fooocus/inputs")
+                inpaint_mask_image_source = await verify_image(
+                    http_session, config.inpaint_mask_image, user_id, subdir="fooocus/inputs"
+                )
                 if inpaint_mask_image_source.encoded_image:
                     inpaint_mask_image = base64_to_numpy_array(inpaint_mask_image_source.encoded_image)
 
@@ -779,7 +808,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 config.image_number,
                 image_seed,
                 config.sharpness,
-                config.guidance_scale
+                config.guidance_scale,
             ]
 
             ctrls += [config.base_model, config.refiner_model, config.refiner_switch] + lora_ctrls
@@ -789,9 +818,13 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             ctrls += ip_ctrls
             return ctrls
 
-    @app.websocket('/api/focus/ws/generate')
+    @app.websocket("/api/focus/ws/generate")
     async def generate_image_socket(
-            websocket: WebSocket, task_id: str | None = None, is_url: bool = False, user_id: Annotated[str | None, Header()] = "local"):
+        websocket: WebSocket,
+        task_id: str | None = None,
+        is_url: bool = False,
+        user_id: Annotated[str | None, Header()] = "local",
+    ):
         if user_id is None:
             raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Could not identify user.")
         start_time = datetime.now(timezone.utc)
@@ -809,7 +842,9 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             else:
                 data = await websocket.receive_text()
                 generation_option = GenerationOption(**json.loads(data))
-                advanced_parameters.set_all_advanced_parameters(*convert_advanced_options_to_list(generation_option.advanced_options))
+                advanced_parameters.set_all_advanced_parameters(
+                    *convert_advanced_options_to_list(generation_option.advanced_options)
+                )
                 args = await prepare_args_for_generate(generation_option, user_id)
                 async for progress in generate_clicked(*args, base_dir=output_dir):
                     previous_status = await update_database(progress, previous_status, user_id, generation_option)
@@ -820,7 +855,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
         finally:
             await websocket.close()
 
-    @app.post('/api/focus/stop', response_class=JSONResponse)
+    @app.post("/api/focus/stop", response_class=JSONResponse)
     async def stop_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
@@ -829,8 +864,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             return {"status": "success"}
         return {"status": "failed"}
 
-
-    @app.post('/api/focus/skip', response_class=JSONResponse)
+    @app.post("/api/focus/skip", response_class=JSONResponse)
     async def skip_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
@@ -839,39 +873,54 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
             return {"status": "success"}
         return {"status": "failed"}
 
-
-    @app.get('/api/focus/task_records', response_model=FocusTasks, response_class=JSONResponse)
+    @app.get("/api/focus/task_records", response_model=FocusTasks, response_class=JSONResponse)
     async def get_focus_task_record_for_status(task_status: str, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
         async with get_db() as db:
             records = await query_focus_task_record_with_status(db, user_id, task_status)
-            records_response = FocusTasks(tasks=[FocusTask(
-                task_id=record.task_id, status=record.status, created_at=record.created_at) for record in records])
+            records_response = FocusTasks(
+                tasks=[
+                    FocusTask(task_id=record.task_id, status=record.status, created_at=record.created_at)
+                    for record in records
+                ]
+            )
             return records_response
 
-    @app.get('/api/focus/default_options', response_model=DefaultOptions, response_class=JSONResponse)
+    @app.get("/api/focus/default_options", response_model=DefaultOptions, response_class=JSONResponse)
     async def get_default_options(request: Request, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
         return DefaultOptions(
             hostname=get_hostname(request, settings.hostname),
             performances=OptionList(default=modules.config.default_performance, options=flags.performance_selections),
-            aspect_ratios=OptionList(default=modules.config.default_simplified_aspect_ratio, options=modules.config.available_simplified_aspect_ratios),
-            styles=OptionList(default_list=list(modules.config.default_styles), options=copy.deepcopy(style_sorter.all_styles)),
-            base_models=OptionList(default=modules.config.default_base_model_name, options=modules.config.model_filenames),
-            refiner_models=OptionList(default=modules.config.default_refiner_model_name, options=modules.config.model_filenames),
-            first_lora_name=OptionList(default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames),
+            aspect_ratios=OptionList(
+                default=modules.config.default_simplified_aspect_ratio,
+                options=modules.config.available_simplified_aspect_ratios,
+            ),
+            styles=OptionList(
+                default_list=list(modules.config.default_styles), options=copy.deepcopy(style_sorter.all_styles)
+            ),
+            base_models=OptionList(
+                default=modules.config.default_base_model_name, options=modules.config.model_filenames
+            ),
+            refiner_models=OptionList(
+                default=modules.config.default_refiner_model_name, options=modules.config.model_filenames
+            ),
+            first_lora_name=OptionList(
+                default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames
+            ),
             first_lora_weight=modules.config.default_loras[0][1],
             num_loras=len(modules.config.default_loras),
             uovs=OptionList(default=flags.disabled, options=flags.uov_list),
             ip_types=OptionList(default=flags.default_ip, options=flags.ip_list),
             num_image_prompts=4,
-            content_types=OptionList(default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]),
+            content_types=OptionList(
+                default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]
+            ),
         )
 
-
-    @app.post('/api/focus/like', response_class=JSONResponse)
+    @app.post("/api/focus/like", response_class=JSONResponse)
     async def like_or_unlike_an_image(like: Like, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
@@ -885,8 +934,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 "liked": like.like,
             }
 
-
-    @app.post('/api/focus/favorite', response_class=JSONResponse)
+    @app.post("/api/focus/favorite", response_class=JSONResponse)
     async def favorite_or_unfavorite_an_image(favorite: Favorite, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
@@ -900,8 +948,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 "favorited": favorite.favorite,
             }
 
-
-    @app.post('/api/focus/share', response_class=JSONResponse)
+    @app.post("/api/focus/share", response_class=JSONResponse)
     async def share_or_unshare_an_image(share: Share, user_id: Annotated[str | None, Header()] = "local"):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
@@ -915,14 +962,14 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 "shared": share.share,
             }
 
-
     @app.post("/api/focus/upload/")
-    async def upload_image(subdir: str = "", file: UploadFile = File(...), user_id: Annotated[str | None, Header()] = "local"):
+    async def upload_image(
+        subdir: str = "", file: UploadFile = File(...), user_id: Annotated[str | None, Header()] = "local"
+    ):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
         if user_id != "local" and settings.output_base_dir:
-            output_dir = os.path.join(
-                settings.output_base_dir, get_user_subdir(user_id), "inputs", "focus")
+            output_dir = os.path.join(settings.output_base_dir, get_user_subdir(user_id), "inputs", "focus")
             if subdir:
                 output_dir = os.path.join(output_dir, subdir)
         else:
@@ -935,7 +982,7 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
                 file.filename = str(uuid.uuid4()) + file.filename
             file_path = os.path.join(output_dir, file.filename)
 
-            async with aiofiles.open(file_path, 'wb') as out_file:
+            async with aiofiles.open(file_path, "wb") as out_file:
                 while content := await file.read(1024):  # Read 1024 bytes at a time
                     await out_file.write(content)
 
@@ -943,16 +990,12 @@ def create_api(app: FastAPI, generate_clicked: Callable, refresh_seed: Callable,
         except Exception as e:
             return JSONResponse(status_code=500, content={"message": str(e)})
 
-
-    @app.get('/ui', response_class=HTMLResponse)
+    @app.get("/ui", response_class=HTMLResponse)
     async def vue_ui(request: Request):
         global database_created
         if not database_created:
             await create_tables()
             database_created = True
-        return templates.TemplateResponse(
-            "ui.html",
-            {"request": request})
-
+        return templates.TemplateResponse("ui.html", {"request": request})
 
     return app
