@@ -31,9 +31,10 @@ from api import settings, Status, QueuingStatus, Progress, create_api
 logger = logging.getLogger("uvicorn.error")
 
 
-async def generate_clicked(*args, base_dir: str | None = None):
+async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''):
     import ldm_patched.modules.model_management as model_management
-    task_id = str(uuid.uuid4())
+    if not task_id:
+        task_id = str(uuid.uuid4())
 
     with model_management.interrupt_processing_mutex:
         model_management.interrupt_processing = False
