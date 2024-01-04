@@ -239,11 +239,16 @@
                                     </v-col>
                                   </v-row>
                                   <v-row>
-                                    <v-radio-group v-model="imagePrompts[index-1].params.controlType" inline>
+                                    <v-radio-group
+                                      v-model="imagePrompts[index-1].params.controlType"
+                                      inline
+                                      @update:model-value="updateImagePromptDefault(index-1, imagePrompts[index-1].params.controlType)"
+                                    >
                                       <v-radio
                                         v-for="(name, index) in ipTypes"
                                         :label="name"
-                                        :value="name">
+                                        :value="name"
+                                      >
                                       </v-radio>
                                     </v-radio-group>
                                   </v-row>
@@ -945,6 +950,7 @@
             numImagePrompts: 4,
             imagePromptImages: [],
             imagePromptAdvancedPanel: "",
+            imagePromptDefaultValues: {},
             contentTypeSelection: "Photograph",
             contentTypes: [],
             describeImageUploader: null,
@@ -1489,6 +1495,10 @@
               console.error('Post share error:', error);
             });
           },
+          updateImagePromptDefault(index, styleType) {
+            this.imagePrompts[index].params.stopAt = this.imagePromptDefaultValues[styleType].stop;
+            this.imagePrompts[index].params.weight = this.imagePromptDefaultValues[styleType].weight;
+          },
         },
         mounted() {
           fetch("/api/focus/default_options", {
@@ -1523,6 +1533,7 @@
             this.numImagePrompts = options.num_image_prompts;
             this.contentTypeSelection = options.content_types.default;
             this.contentTypes = options.content_types.options;
+            this.imagePromptDefaultValues = options.ip_default_options;
             this.selectedLoraModels = [];
             this.selectedLoraWeights = [];
             for (let i = 0; i < this.numLoras; i++) {
@@ -1537,8 +1548,8 @@
             for (let i = 0; i < this.numImagePrompts; i++) {
               this.imagePrompts.push({
                 params: {
-                  stopAt: 0.5,
-                  weight: 1.0,
+                  stopAt: options.ip_default_options[options.ip_types.default].stop,
+                  weight: options.ip_default_options[options.ip_types.default].weight,
                   controlType: options.ip_types.default,
                 },
               });

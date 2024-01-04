@@ -317,6 +317,11 @@ class OptionList(BaseModel):
     default_list: list[str] = Field(default=[], description="Default value list for the field.")
 
 
+class ImagePromptOptions(BaseModel):
+    stop: float = Field(description="Stop at for controlnet.")
+    weight: float = Field(description="Weight for controlnet.")
+
+
 class DefaultOptions(BaseModel):
     hostname: str = Field(description="Base url of the websocket.")
     performances: OptionList = Field(description="Performance options.")
@@ -329,6 +334,7 @@ class DefaultOptions(BaseModel):
     num_loras: int = Field(description="Number of Loras.")
     uovs: OptionList = Field(description="Upscale or variation options.")
     ip_types: OptionList = Field(description="Image prompt Control Types.")
+    ip_default_options: dict[str, ImagePromptOptions] = Field(description="Image prompt default options.")
     num_image_prompts: int = Field(description="Number of image prompts.")
     content_types: OptionList = Field(description="Content types for describe image.")
 
@@ -978,6 +984,12 @@ def create_api(
             num_loras=len(modules.config.default_loras),
             uovs=OptionList(default=flags.disabled, options=flags.uov_list),
             ip_types=OptionList(default=flags.default_ip, options=flags.ip_list),
+            ip_default_options={
+                ip_type: ImagePromptOptions(
+                    stop=flags.default_parameters[ip_type][0], weight=flags.default_parameters[ip_type][1]
+                )
+                for ip_type in flags.ip_list
+            },
             num_image_prompts=4,
             content_types=OptionList(
                 default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]
