@@ -956,6 +956,7 @@
 
     <script src="https://scaleflex.cloudimg.io/v7/plugins/filerobot-image-editor/latest/filerobot-image-editor.min.js"></script>
     <script type="text/javascript" src="/api/focus/static/js/mask.js"></script>
+    <script type="text/javascript" src="/api/focus/static/js/utils.js"></script>
     <script>
       const { createApp } = Vue;
       const { createVuetify } = Vuetify;
@@ -1228,6 +1229,7 @@
           },
           packGenerationParameters() {
             let genParams = {
+              task_id: randomId(),
               prompt: this.prompt,
               negative_prompt: this.negativePrompt,
               style_selections: this.selectedStyles,

@@ -247,6 +247,7 @@ class AdvancedOptions(BaseModel):
 
 
 class GenerationOption(BaseModel):
+    task_id: str = Field(description="Task id for generation.")
     prompt: str = Field(description="Prompt for generation.")
     negative_prompt: str = Field(
         default=modules.config.default_prompt_negative, description="Negative prompt for generation."
@@ -914,7 +915,7 @@ def create_api(
                     *convert_advanced_options_to_list(generation_option.advanced_options)
                 )
                 args = await prepare_args_for_generate(generation_option, user_id)
-                async for progress in generate_clicked(*args, base_dir=output_dir):
+                async for progress in generate_clicked(*args, base_dir=output_dir, task_id=generation_option.task_id):
                     previous_status = await update_database(progress, previous_status, user_id, generation_option)
                     generate_progress = await extract_progress(progress, is_url, user_id, start_time)
                     await websocket.send_json(generate_progress.dict())
