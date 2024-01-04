@@ -384,6 +384,8 @@
                             block
                             color="grey-lighten-1"
                             height="48"
+                            :loading="describeImageLoading"
+                            @click="describeImageLocal"
                           >Describe into Prompt (BLIP)</v-btn>
                         </div>
                         <div class="ma-4">
@@ -962,6 +964,7 @@
             imageOptionsCloseButtonHover: false,
             toolObserver: null,
             optionsObserver: null,
+            describeImageLoading: false,
           };
         },
         methods: {
@@ -1335,6 +1338,41 @@
             .catch((error) => {
               this.stopLoading = false;
               console.error('Post skip error:', error);
+            });
+          },
+          describeImageLocal() {
+            this.describeImageLoading = true;
+            fetch("/api/focus/describe/local", {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                mode: this.contentTypeSelection,
+                image: {
+                  encoded_image: this.describeImageUploader,
+                },
+                },
+              })
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((result) => {
+              this.prompt = result.prompt;
+              this.selectedStyles = result.styles;
+              this.describeImageLoading = false;
+              if (!result.image_id) {
+                // TODO: show error message
+              }
+            })
+            .catch((error) => {
+              this.describeImageLoading = false;
+              console.error('Post describe error:', error);
             });
           },
           toggleRandom() {

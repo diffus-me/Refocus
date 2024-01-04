@@ -893,7 +893,7 @@ app, _, _ = shared.gradio_root.launch(
     },
 )
 
-app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked)
+app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
 
 
 async def block_thread():

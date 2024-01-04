@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import copy
 import hashlib
@@ -44,6 +45,7 @@ from modules.database import (
     favorite_an_image,
     get_db,
     insert_focus_task_record,
+    insert_sync_task_record,
     like_an_image,
     query_focus_task_record_with_status,
     share_an_image,
@@ -133,6 +135,21 @@ class ControlConfig(BaseModel):
 class InpaintInputImage(BaseModel):
     image: ImageSource = Field(description="Image for inpaint.")
     mask: ImageSource = Field(description="Mask for inpaint.")
+
+
+class DescribeImageInfo(BaseModel):
+    mode: str = Field(
+        default=flags.desc_type_photo,
+        description=f"Mode of the description task.Options are [{flags.desc_type_photo}, {flags.desc_type_anime}]",
+    )
+    image: ImageSource = Field(description="Image for description.")
+
+
+class DescribeImageResult(BaseModel):
+    task_id: str = Field(description="Task uuid.")
+    image_id: str | None = Field(default=None, description="Image id.")
+    prompt: str | None = Field(default=None, description="Image url.")
+    styles: list[str] = Field(default=list(), description="Description of the image.")
 
 
 class AdvancedOptions(BaseModel):
@@ -669,6 +686,12 @@ def strip_encoded_image_from_generation_option(generation_params: GenerationOpti
     return generation_params
 
 
+def strip_encoded_image(image_source: ImageSource) -> ImageSource:
+    image_source = copy.deepcopy(image_source)
+    image_source.encoded_image = ""
+    return image_source
+
+
 async def update_database(
     progress: Progress, previous_status: str | None, user_id: str, generation_params: GenerationOption | None = None
 ) -> str:
@@ -723,6 +746,7 @@ def create_api(
     recover_task: Callable,
     stop_clicked: Callable,
     skip_clicked: Callable,
+    trigger_describe: Callable,
 ) -> FastAPI:
     app.mount("/api/focus/static", StaticFiles(directory="static"), name="static")
 
@@ -886,6 +910,46 @@ def create_api(
                 ]
             )
             return records_response
+
+    @app.post("/api/focus/describe/local", response_model=DescribeImageResult, response_class=JSONResponse)
+    async def describe_image_local(image_info: DescribeImageInfo, user_id: Annotated[str | None, Header()] = "local"):
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        if image_info.mode not in [flags.desc_type_photo, flags.desc_type_anime]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid mode.")
+        async with aiohttp.ClientSession() as http_session:
+            task_id = str(uuid.uuid4())
+
+            image_source = await verify_image(
+                http_session, image_info.image, user_id, subdir="fooocus/inputs", exception=HTTPException
+            )
+            if not image_source.encoded_image:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Image is invalid or cannot be accessed."
+                )
+            prompt, styles = await asyncio.to_thread(
+                trigger_describe, image_info.mode, base64_to_numpy_array(image_source.encoded_image)
+            )
+            image_id = None
+            if image_source.image_filepath:
+                image_id = encode_filepath_with_base64(image_source.image_filepath)
+            result = DescribeImageResult(task_id=task_id, image_id=image_id, prompt=prompt, styles=styles)
+            image_info.image = strip_encoded_image(image_info.image)
+            async with get_db() as db:
+                hostname = socket.gethostname()
+                server_ip = socket.gethostbyname(hostname)
+                await insert_sync_task_record(
+                    db,
+                    user_id,
+                    task_id,
+                    "describe-local",
+                    "finished" if image_id else "failed",
+                    image_info.json(),
+                    hostname,
+                    server_ip,
+                    result.json(),
+                )
+            return result
 
     @app.get("/api/focus/default_options", response_model=DefaultOptions, response_class=JSONResponse)
     async def get_default_options(request: Request, user_id: Annotated[str | None, Header()] = "local"):
