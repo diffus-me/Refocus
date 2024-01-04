@@ -1,4 +1,5 @@
 import threading
+from modules import script_callbacks
 
 
 class AsyncTask:
@@ -844,6 +845,7 @@ def worker():
             task = async_tasks.pop(0)
             try:
                 running_task = task
+                script_callbacks.before_task_callback(task.task_id)
                 handler(task)
                 build_image_wall(task)
                 pipeline.prepare_text_encoder(async_call=True)
@@ -852,6 +854,7 @@ def worker():
             finally:
                 task.yields.append(['finish', task.results])
                 finished_tasks.append(task)
+                script_callbacks.after_task_callback(task.task_id)
                 running_task = None
 
 
