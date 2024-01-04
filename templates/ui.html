@@ -1346,12 +1346,16 @@
               return;
             }
             let socket = null;
+            let wsProtocol = "wss";
+            if (location.protocol == "http:") {
+              wsProtocol = "ws";
+            }
             if (this.generating && this.runningTaskId) {
-              socket = new WebSocket(`ws://${this.hostname}/api/focus/ws/generate?` + new URLSearchParams({
+              socket = new WebSocket(`${wsProtocol}://${this.hostname}/api/focus/ws/generate?` + new URLSearchParams({
                 task_id: this.runningTaskId,
               }));
             } else {
-              socket = new WebSocket(`ws://${this.hostname}/api/focus/ws/generate`);
+              socket = new WebSocket(`${wsProtocol}://${this.hostname}/api/focus/ws/generate`);
             }
             this.generating = true;
             this.runningTaskMessage = "Preparing...";
