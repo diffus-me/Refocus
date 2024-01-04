@@ -40,6 +40,7 @@ import modules.advanced_parameters as advanced_parameters
 import modules.config
 import modules.flags as flags
 import modules.style_sorter as style_sorter
+from modules import system_monitor
 from modules.config import convert_ratio, read_preset_and_update_config
 from modules.database import (
     create_tables,
@@ -303,6 +304,28 @@ class GenerationOption(BaseModel):
     advanced_options: AdvancedOptions = Field(
         default=AdvancedOptions(), description="Advanced settings for generation."
     )
+
+    def get_image_ratios(self):
+        width, height = self.aspect_ratios_selection.replace("×", " ").split(" ")[:2]
+
+        if self.advanced_options.overwrite_width > 0:
+            width = self.advanced_options.overwrite_width
+
+        if self.advanced_options.overwrite_height > 0:
+            height = self.advanced_options.overwrite_height
+        return int(width), int(height)
+
+    def get_steps(self):
+        steps = 30
+        if self.performance_selection == "Speed":
+            steps = 30
+        elif self.performance_selection == "Quality":
+            steps = 60
+        elif self.performance_selection == "Extreme Speed":
+            steps = 8
+        if self.advanced_options.overwrite_step > 0:
+            steps = self.advanced_options.overwrite_step
+        return steps
 
 
 class FocusTask(BaseModel):
@@ -914,11 +937,38 @@ def create_api(
                 advanced_parameters.set_all_advanced_parameters(
                     *convert_advanced_options_to_list(generation_option.advanced_options)
                 )
-                args = await prepare_args_for_generate(generation_option, user_id)
-                async for progress in generate_clicked(*args, base_dir=output_dir, task_id=generation_option.task_id):
-                    previous_status = await update_database(progress, previous_status, user_id, generation_option)
-                    generate_progress = await extract_progress(progress, is_url, user_id, start_time)
-                    await websocket.send_json(generate_progress.dict())
+                request_headers = dict(websocket.headers)
+                request_headers["x-session-hash"] = str(uuid.uuid4())
+                request_headers["x-task-id"] = task_id
+                width, height = generation_option.get_image_ratios()
+                async with system_monitor.monitor_call_context(
+                    request_headers=request_headers,
+                    api_name="focus.txt2img",
+                    function_name="focus.txt2img",
+                    task_id=generation_option.task_id,
+                    is_intermediate=False,
+                ):
+                    async with system_monitor.monitor_call_context(
+                        request_headers=request_headers,
+                        api_name="focus.txt2img",
+                        function_name="focus.txt2img",
+                        decoded_params={
+                            "batch_size": 1,
+                            "n_iter": generation_option.image_number,
+                            "steps": generation_option.get_steps(),
+                            "height": height,
+                            "width": width,
+                        },
+                    ):
+                        args = await prepare_args_for_generate(generation_option, user_id)
+                        async for progress in generate_clicked(
+                            *args, base_dir=output_dir, task_id=generation_option.task_id
+                        ):
+                            previous_status = await update_database(
+                                progress, previous_status, user_id, generation_option
+                            )
+                            generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                            await websocket.send_json(generate_progress.dict())
         except WebSocketDisconnect:
             print("Client disconnected")
         finally:
