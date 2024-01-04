@@ -194,3 +194,67 @@ async def unshare_an_image(session: AsyncSession, user_id: str, image_id: str) -
         await session.commit()
         return record
     return None
+
+
+class SyncTaskRecord(Base):
+    __tablename__ = "sync_task_records"
+
+    id = mapped_column(Integer, primary_key=True, nullable=False, unique=True, autoincrement=True)
+    user_id = mapped_column(String(64), index=True, nullable=False)
+    task_id = mapped_column(String(64), index=True, nullable=False)
+    task_type = mapped_column(String(32), index=True, nullable=False)
+    hostname = mapped_column(String(64), index=True, nullable=False)
+    server_ip = mapped_column(String(32), index=True, nullable=False)
+    status = mapped_column(String(16), index=True, nullable=False)
+    params = mapped_column(Text, nullable=False)
+    result = mapped_column(Text, nullable=True)
+    created_at = mapped_column(DateTime(), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(DateTime(), server_default=func.now(), nullable=False)
+
+
+async def insert_sync_task_record(
+    session: AsyncSession,
+    user_id: str,
+    task_id: str,
+    task_type: str,
+    status: str,
+    params: str,
+    hostname: str,
+    ip: str,
+    result: str | None = None,
+) -> SyncTaskRecord:
+    args = {
+        "user_id": user_id,
+        "task_id": task_id,
+        "task_type": task_type,
+        "status": status,
+        "params": params,
+        "hostname": hostname,
+        "server_ip": ip,
+    }
+    if result:
+        args["result"] = result
+    record = SyncTaskRecord(**args)
+    session.add(record)
+    await session.commit()
+    return record
+
+
+async def update_sync_task_record(
+    session: AsyncSession,
+    task_id: str,
+    status: str | None = None,
+    result: str | None = None,
+) -> SyncTaskRecord | None:
+    statement = select(SyncTaskRecord).where(SyncTaskRecord.task_id == task_id).limit(1)
+    query_result = await session.execute(statement)
+    record = query_result.scalar_one_or_none()
+    if record:
+        if status:
+            record.status = status
+        if result:
+            record.result = result
+        record.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        return record
+    return None
