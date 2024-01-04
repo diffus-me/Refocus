@@ -1,4 +1,5 @@
 import threading
+from modules import script_callbacks
 
 
 class AsyncTask:
@@ -288,7 +289,7 @@ def worker():
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
-                
+
                 if advanced_parameters.inpaint_mask_upload_checkbox:
                     if isinstance(inpaint_mask_image_upload, np.ndarray):
                         if inpaint_mask_image_upload.ndim == 3:
@@ -836,6 +837,7 @@ def worker():
         time.sleep(0.01)
         if len(async_tasks) > 0:
             task = async_tasks.pop(0)
+            script_callbacks.before_task_callback(task.task_id)
             try:
                 running_task = task
                 handler(task)
@@ -847,6 +849,7 @@ def worker():
                 task.yields.append(['finish', task.results])
                 finished_tasks.append(task)
                 running_task = None
+                script_callbacks.after_task_callback(task.task_id)
 
 
 threading.Thread(target=worker, daemon=True).start()
