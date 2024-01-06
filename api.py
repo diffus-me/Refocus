@@ -950,7 +950,7 @@ def create_api(
                 )
                 request_headers = dict(websocket.headers)
                 request_headers["x-session-hash"] = str(uuid.uuid4())
-                request_headers["x-task-id"] = task_id
+                request_headers["x-task-id"] = task_id or generation_option.task_id
                 width, height = generation_option.get_image_ratios()
                 async with system_monitor.monitor_call_context(
                     request_headers=request_headers,
