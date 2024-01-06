@@ -903,13 +903,13 @@ def create_api(
                 request_headers['x-session-hash'] = str(uuid.uuid4())
                 request_headers['x-task-id'] = task_id
                 width, height = generation_option.get_image_ratios()
-                with system_monitor.monitor_call_context(
+                async with system_monitor.monitor_call_context(
                         request_headers=request_headers,
                         api_name='focus.txt2img',
                         function_name='focus.txt2img',
                         task_id=generation_option.task_id,
                         is_intermediate=False, ):
-                    with system_monitor.monitor_call_context(
+                    async with system_monitor.monitor_call_context(
                             request_headers=request_headers,
                             api_name='focus.txt2img',
                             function_name='focus.txt2img',
