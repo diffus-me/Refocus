@@ -391,7 +391,12 @@
                             height="48"
                             :loading="describeImageLoading"
                             @click="describeImageLocal"
-                          >Describe into Prompt (BLIP)</v-btn>
+                          >
+                            <span style="white-space: normal;">
+                              Describe into Prompt (BLIP)<br/>
+                              <span class="text-caption">[[getConsumeText(this.estimateBlipConsume)]]</span>
+                            </span>
+                          </v-btn>
                         </div>
                         <div class="ma-4" v-if="false">
                           <v-btn
@@ -456,7 +461,14 @@
               height="56px"
               color="#5a3cff"
               :disabled="loadingPreset"
-            >Generate</v-btn>
+            >
+              <span style="white-space: normal;">
+                Generate<br/>
+                <span class="text-caption">
+                  [[getConsumeText(this.estimateConsume.result, this.estimateConsume.imageNumber)]]
+                </span>
+              </span>
+            </v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
             <v-col class="d-flex pa-0 mr-1">
               <v-btn @click="skipGeneration" :loading="skipLoading" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
@@ -1106,6 +1118,13 @@
               show: false,
               src: "",
             },
+            estimateConsume: {
+                args: {},
+                timeoutId: null,
+                result: "-",
+                imageNumber: 2,
+            },
+            estimateBlipConsume: 2,
           };
         },
         methods: {
@@ -1752,6 +1771,268 @@
               }
             });
           },
+          getConsumeText(consume, image_number = null) {
+            const credit_unit = `credit${consume === 1 ? "" :"s"}`;
+            let result = `Estimated ${consume} ${credit_unit}`
+            if (image_number) {
+                const image_unit = `image${image_number === 1 ? "" :"s"}`;
+                result = `${result} for ${image_number} ${image_unit}`;
+            }
+            return `(${result})`;
+          },
+          getShapeCeil(width, height) {
+            return Math.ceil(Math.sqrt(width * height) / 64.0) * 64.0;
+          },
+          getTargetResolution() {
+            const [width, height] = this.aspectRatio.replace("×", " ").split(" ").slice(0, 2);
+            return [Number(width), Number(height)];
+          },
+          getImageResolution(src) {
+            return new Promise((resolve, _) => {
+              const img = new Image();
+              img.src = src;
+              img.onload = () => {
+                resolve([img.naturalWidth, img.naturalHeight]);
+              };
+            });
+          },
+          getStepsCoefficient() {
+            const mapping = {
+              "Speed": 2,
+              "Quality": 4,
+              "Extreme Speed": 1,
+              "Turbo": 1,
+            }
+            return mapping[this.performance];
+          },
+          async requestCreditsConsumption(args) {
+            const body = {
+              ...args,
+              link_params: {},
+              mutipliers: {},
+              link_mutipliers: {},
+            }
+
+            const response = await fetch(
+              "/api/tasks/credits_consumption",
+              {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ functions: args }),
+              }
+            )
+            if (response.status != 200) {
+              return "-";
+            }
+            const content = await response.json();
+            return content.inference;
+          },
+          async getImageOptionsConsumeArgs() {
+            if (!this.showImageOptions) {
+              return;
+            }
+            if (this.imageOptionTab === "uov") {
+              if (!this.uovImageFile) {
+                return;
+              }
+              let [width, height] = await this.getImageResolution(this.uovImageFile);
+              if (this.uovSelection.includes("Vary")) {
+                const shapeCeil = this.getShapeCeil(width, height);
+                if (shapeCeil <= 1024) {
+                  width = 1024;
+                  height = 1024;
+                } else if (shapeCeil >= 2048) {
+                  width = 2048;
+                  height = 2048;
+                }
+                return {
+                  "fooocus.vary": {
+                    params: {
+                      width: width,
+                      height: height,
+                      steps_coefficient: this.getStepsCoefficient(),
+                      image_number: this.imageNumber,
+                    }
+                  }
+                }
+              }
+              if (this.uovSelection.includes("Upscale")) {
+                const scale = this.uovSelection.includes("1.5") ? 1.5 : 2.0;
+                width *= scale;
+                height *= scale;
+
+                let is_fast = this.uovSelection.includes("Fast");
+
+                let shapeCeil = this.getShapeCeil(width, height);
+                if (shapeCeil <= 1024) {
+                  width = 1024;
+                  height = 1024;
+                } else if (shapeCeil > 2800) {
+                  is_fast = true;
+                }
+                let steps_coefficient = 0;
+                let image_number = 1;
+                if (!is_fast) {
+                  steps_coefficient = this.getStepsCoefficient();
+                  image_number = this.imageNumber;
+                }
+
+                return {
+                  "fooocus.upscale": {
+                    params: {
+                      width: width,
+                      height: height,
+                      steps_coefficient: steps_coefficient,
+                      image_number: image_number,
+                    }
+                  }
+                }
+              }
+              return;
+            }
+            if (this.imageOptionTab === "inpaint") {
+              if (!this.inpaintImageUploader) {
+                return;
+              }
+              let [width, height] = await this.getImageResolution(this.inpaintImageUploader);
+
+              if (this.inpaintSelection === "Inpaint or Outpaint (default)") {
+                let scale = 0;
+                if (this.outpaintDirection.includes("Top")) {
+                  scale += 0.3
+                }
+                if (this.outpaintDirection.includes("Bottom")) {
+                  scale += 0.3
+                }
+                height += height * scale;
+
+                scale = 0;
+                if (this.outpaintDirection.includes("Left")) {
+                  scale += 0.3
+                }
+                if (this.outpaintDirection.includes("Right")) {
+                  scale += 0.3
+                }
+                width += height * scale;
+              }
+              return {
+                "fooocus.inpaint": {
+                  params: {
+                    width: width,
+                    height: height,
+                    steps_coefficient: this.getStepsCoefficient(),
+                    image_number: this.imageNumber,
+                  }
+                }
+              }
+            }
+            if (this.imageOptionTab === "ip") {
+              let ip_ctrls = 0;
+              for (const imagePromptUploader of this.imagePromptImages) {
+                if (imagePromptUploader) {
+                  ip_ctrls += 1;
+                }
+              }
+              const [width, height] = this.getTargetResolution();
+              return {
+                "fooocus": {
+                  params: {
+                    width: width,
+                    height: height,
+                    steps_coefficient: this.getStepsCoefficient(),
+                    ip_ctrls: ip_ctrls,
+                    image_number: this.imageNumber,
+                  }
+                }
+              }
+            }
+            return;
+          },
+          async updateEstimateConsume(_) {
+            let args = await this.getImageOptionsConsumeArgs();
+            if (!args) {
+              const [width, height] = this.getTargetResolution();
+              args = {
+                "fooocus": {
+                  params: {
+                    width: width,
+                    height: height,
+                    steps_coefficient: this.getStepsCoefficient(),
+                    ip_ctrls: 0,
+                    image_number: this.imageNumber,
+                  }
+                }
+              }
+            }
+            if (JSON.stringify(args) === JSON.stringify(this.estimateConsume.args)) {
+              return;
+            }
+            this.estimateConsume.args = args;
+            if (this.estimateConsume.timeoutId !== null) {
+              clearTimeout(this.estimateConsume.timeoutId);
+            }
+            this.estimateConsume.timeoutId = setTimeout(
+              async () => {
+                let request_args = this.estimateConsume.args;
+                this.estimateConsume.imageNumber = Object.values(request_args)[0].params.image_number;
+                this.estimateConsume.result = await this.requestCreditsConsumption(request_args);
+                this.estimateConsume.timeoutId = null;
+              },
+              1000
+            );
+          },
+          async updateBlipEstimateConsume(_) {
+            if (!this.showImageOptions) {
+              this.estimateBlipConsume = "-";
+              return;
+            }
+            if (this.imageOptionTab != "describe") {
+              this.estimateBlipConsume = "-";
+              return;
+            }
+            if (!this.describeImageUploader) {
+              this.estimateBlipConsume = "-";
+              return;
+            }
+            let [width, height] = await this.getImageResolution(this.describeImageUploader);
+            args = {
+              "fooocus.describe.blip": {
+                params: {
+                  width: width,
+                  height: height,
+                }
+              }
+            }
+            this.estimateBlipConsume = await this.requestCreditsConsumption(args);
+          },
+        },
+        created() {
+          for (let name of [
+            "showImageOptions",
+            "imageOptionTab",
+            "uovImageFile",
+            "uovSelection",
+            "performance",
+            "inpaintImageUploader",
+            "inpaintSelection",
+            "outpaintDirection",
+            "aspectRatio",
+            "imageNumber",
+          ]) {
+            this.$watch(name, this.updateEstimateConsume);
+          }
+          this.$watch("imagePromptImages", this.updateEstimateConsume, { deep: true });
+
+          for (let name of [
+            "showImageOptions",
+            "imageOptionTab",
+            "describeImageUploader",
+          ]) {
+            this.$watch(name, this.updateBlipEstimateConsume);
+          }
         },
         mounted() {
           this.updateDefaultOptions("default", this.initializeFilerobot);

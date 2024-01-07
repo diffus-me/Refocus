@@ -11,7 +11,7 @@ import os
 import socket
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Any
 from urllib.parse import urlparse
 
 import aiofiles
@@ -40,6 +40,7 @@ import modules.advanced_parameters as advanced_parameters
 import modules.config
 import modules.flags as flags
 import modules.style_sorter as style_sorter
+from modules.util import get_shape_ceil
 from modules import system_monitor
 from modules.config import convert_ratio, read_preset_and_update_config
 from modules.database import (
@@ -125,7 +126,10 @@ class ImageResult(ImageSource):
 
 class RemoteImageSource(ImageSource):
     image_filepath: str | None = None
+    image_np: np.ndarray | None = None
 
+    class Config:
+        arbitrary_types_allowed = True
 
 class ControlConfig(BaseModel):
     ip_image: ImageSource | None = Field(default=None, description="Image prompt for generation.")
@@ -305,7 +309,7 @@ class GenerationOption(BaseModel):
         default=AdvancedOptions(), description="Advanced settings for generation."
     )
 
-    def get_image_ratios(self):
+    def get_target_resolution(self) -> tuple[int, int]:
         width, height = self.aspect_ratios_selection.replace("×", " ").split(" ")[:2]
 
         if self.advanced_options.overwrite_width > 0:
@@ -315,7 +319,7 @@ class GenerationOption(BaseModel):
             height = self.advanced_options.overwrite_height
         return int(width), int(height)
 
-    def get_steps(self):
+    def get_steps(self) -> int:
         steps = 30
         if self.performance_selection == "Speed":
             steps = 30
@@ -326,6 +330,15 @@ class GenerationOption(BaseModel):
         if self.advanced_options.overwrite_step > 0:
             steps = self.advanced_options.overwrite_step
         return steps
+
+    def get_steps_coefficient(self) -> int:
+        mapping = {
+            "Speed": 2,
+            "Quality": 4,
+            "Extreme Speed": 1,
+            "Turbo": 1,
+        }
+        return mapping[self.performance_selection]
 
 
 class FocusTask(BaseModel):
@@ -557,6 +570,7 @@ async def verify_image(
             if ext and (not output_path.endswith(ext)):
                 output_path = f"{output_path}{ext}"
         local_image.image_filepath = await save_base64_image_to_file(local_image.encoded_image, output_path)
+        local_image.image_np = base64_to_numpy_array(local_image.encoded_image)
     if with_schema:
         if mime is None and local_image.image_filepath:
             mime, _ = mimetypes.guess_type(local_image.image_filepath)
@@ -731,12 +745,24 @@ def strip_encoded_image_from_generation_option(generation_params: GenerationOpti
     generation_params = copy.deepcopy(generation_params)
     if generation_params.uov_input_image:
         generation_params.uov_input_image.encoded_image = ""
+        if isinstance(generation_params.uov_input_image, RemoteImageSource):
+            generation_params.uov_input_image.image_np = None
+
     if generation_params.inpaint_input_image:
         generation_params.inpaint_input_image.image.encoded_image = ""
+        if isinstance(generation_params.inpaint_input_image.image, RemoteImageSource):
+            generation_params.inpaint_input_image.image.image_np = None
+
         generation_params.inpaint_input_image.mask.encoded_image = ""
+        if isinstance(generation_params.inpaint_input_image.mask, RemoteImageSource):
+            generation_params.inpaint_input_image.mask.image_np = None
+
     for ip_ctrl in generation_params.ip_ctrls:
         if ip_ctrl.ip_image:
             ip_ctrl.ip_image.encoded_image = ""
+            if isinstance(ip_ctrl.ip_image, RemoteImageSource):
+                ip_ctrl.ip_image.image_np = None
+
     return generation_params
 
 
@@ -848,10 +874,9 @@ def create_api(
                     if image:
                         image_source = await verify_image(http_session, image, user_id, subdir="fooocus/inputs")
                         config.ip_ctrls[i].ip_image = image_source
-                        if image_source.encoded_image:
-                            image_np = base64_to_numpy_array(image_source.encoded_image)
+                        if image_source.image_np:
                             ip_ctrls += [
-                                image_np,
+                                image_source.image_np,
                                 config.ip_ctrls[i].ip_stop,
                                 config.ip_ctrls[i].ip_weight,
                                 config.ip_ctrls[i].ip_type,
@@ -866,8 +891,7 @@ def create_api(
                     http_session, config.uov_input_image, user_id, subdir="fooocus/inputs"
                 )
                 config.uov_input_image = uov_input_image_source
-                if uov_input_image_source.encoded_image:
-                    uov_input_image = base64_to_numpy_array(uov_input_image_source.encoded_image)
+                uov_input_image = uov_input_image_source.image_np
 
             inpaint_input_image = None
             inpaint_mask = None
@@ -876,22 +900,20 @@ def create_api(
                     http_session, config.inpaint_input_image.image, user_id, subdir="fooocus/inputs"
                 )
                 config.inpaint_input_image.image = inpaint_input_image_source
+                inpaint_input_image = inpaint_input_image_source.image_np
+
                 inpaint_mask_source = await verify_image(
                     http_session, config.inpaint_input_image.mask, user_id, subdir="fooocus/inputs"
                 )
                 config.inpaint_input_image.mask = inpaint_mask_source
-                if inpaint_input_image_source.encoded_image:
-                    inpaint_input_image = base64_to_numpy_array(inpaint_input_image_source.encoded_image)
-                if inpaint_mask_source.encoded_image:
-                    inpaint_mask = base64_to_numpy_array(inpaint_mask_source.encoded_image)
+                inpaint_mask = inpaint_mask_source.image_np
 
             inpaint_mask_image = None
             if config.inpaint_mask_image:
                 inpaint_mask_image_source = await verify_image(
                     http_session, config.inpaint_mask_image, user_id, subdir="fooocus/inputs"
                 )
-                if inpaint_mask_image_source.encoded_image:
-                    inpaint_mask_image = base64_to_numpy_array(inpaint_mask_image_source.encoded_image)
+                inpaint_mask_image = inpaint_mask_image_source.image_np
 
             if config.image_seed < 0:
                 image_seed = refresh_seed(True, config.image_seed)
@@ -950,26 +972,22 @@ def create_api(
                 )
                 request_headers = dict(websocket.headers)
                 request_headers["x-session-hash"] = str(uuid.uuid4())
-                request_headers["x-task-id"] = task_id or generation_option.task_id
-                width, height = generation_option.get_image_ratios()
+                request_headers["x-task-id"] = generation_option.task_id
+                args = await prepare_args_for_generate(generation_option, user_id)
+
+                function_name, decoded_params = _get_consume_args(generation_option)
                 async with system_monitor.monitor_call_context(
                     request_headers=request_headers,
-                    api_name="focus.txt2img",
-                    function_name="focus.txt2img",
+                    api_name=function_name,
+                    function_name=function_name,
                     task_id=generation_option.task_id,
                     is_intermediate=False,
                 ):
                     async with system_monitor.monitor_call_context(
                         request_headers=request_headers,
-                        api_name="focus.txt2img",
-                        function_name="focus.txt2img",
-                        decoded_params={
-                            "batch_size": 1,
-                            "n_iter": generation_option.image_number,
-                            "steps": generation_option.get_steps(),
-                            "height": height,
-                            "width": width,
-                        },
+                        api_name=function_name,
+                        function_name=function_name,
+                        decoded_params=decoded_params,
                     ):
                         args = await prepare_args_for_generate(generation_option, user_id)
                         async for progress in generate_clicked(
@@ -1213,3 +1231,120 @@ def create_api(
         return templates.TemplateResponse("ui.html", {"request": request})
 
     return app
+
+
+def _get_image_resolution(image: ImageSource) -> tuple[int, int]:
+    assert isinstance(image, RemoteImageSource) and image.image_np is not None
+    width, height, _ = image.image_np.shape
+    return width, height
+
+
+def _get_image_options_consume_args(config: GenerationOption) -> tuple[str, dict[str, Any]] | None:
+    if not config.input_image_checkbox:
+        return None
+
+    if config.current_tab == "uov":
+        if not config.uov_input_image:
+            return None
+
+        width, height = _get_image_resolution(config.uov_input_image)
+        if "Vary" in config.uov_method:
+            shape_ceil = get_shape_ceil(height, width)
+            if shape_ceil <= 1024:
+                width = 1024
+                height = 1024
+            elif shape_ceil >= 2048:
+                width = 2048
+                height = 2048
+
+            return "fooocus.vary", {
+                "width": width,
+                "height": height,
+                "steps_coefficient": config.get_steps_coefficient(),
+                "image_number": config.image_number,
+            }
+
+        if "Upscale" in config.uov_method:
+            scale = 1.5 if "1.5" in config.uov_method else 2.0
+            width *= scale
+            height *= scale
+
+            is_fast = "Fast" in config.uov_method
+
+            shape_ceil = get_shape_ceil(height, width)
+            if shape_ceil <= 1024:
+                width = 1024
+                height = 1024
+            elif shape_ceil > 2800:
+                is_fast = True
+
+            steps_coefficient = 0
+            image_number = 1
+            if not is_fast:
+                steps_coefficient = config.get_steps_coefficient()
+                image_number = config.image_number
+
+            return "fooocus.upscale", {
+                "width": width,
+                "height": height,
+                "steps_coefficient": steps_coefficient,
+                "image_number": image_number,
+            }
+
+        return None
+
+    if config.current_tab == "inpaint":
+        if not config.inpaint_input_image:
+            return None
+
+        width, height = _get_image_resolution(config.inpaint_input_image.image)
+
+        if config.outpaint_selections:
+            scale = 0
+            if "Top" in config.outpaint_selections:
+                scale += 0.3
+            if "Bottom" in config.outpaint_selections:
+                scale += 0.3
+            height += height * scale
+
+            scale = 0
+            if "Left" in config.outpaint_selections:
+                scale += 0.3
+            if "Right" in config.outpaint_selections:
+                scale += 0.3
+            width += height * scale
+
+        return "fooocus.inpaint", {
+            "width": width,
+            "height": height,
+            "steps_coefficient": config.get_steps_coefficient(),
+            "image_number": config.image_number,
+        }
+
+    if config.current_tab == "ip":
+        ip_ctrls = sum(bool(ip_ctrl.ip_image) for ip_ctrl in config.ip_ctrls)
+        width, height = config.get_target_resolution()
+
+        return "fooocus", {
+            "width": width,
+            "height": height,
+            "steps_coefficient": config.get_steps_coefficient(),
+            "ip_ctrls": ip_ctrls,
+            "image_number": config.image_number,
+        }
+
+    return None
+
+def _get_consume_args(config: GenerationOption) -> tuple[str, dict[str, Any]]:
+    args = _get_image_options_consume_args(config)
+    if args:
+        return args
+
+    width, height = config.get_target_resolution()
+    return "fooocus", {
+        "width": width,
+        "height": height,
+        "steps_coefficient": config.get_steps_coefficient(),
+        "ip_ctrls": 0,
+        "image_number": config.image_number,
+    }
