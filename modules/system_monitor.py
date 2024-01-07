@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class MonitorException(Exception):
-    def __init__(self, status_code, msg):
+    def __init__(self, task_id: str, status_code: int, msg: str):
+        self.task_id = task_id
         self.status_code = status_code
         self._msg = msg
 
@@ -112,7 +113,7 @@ async def _before_task_started(
         logger.error(
             f'create monitor log failed, status: {resp.status}, message: {resp_text[:min(100, len(resp_text))]}'
         )
-        raise MonitorException(resp.status, resp.text)
+        raise MonitorException(task_id, resp.status, resp_text)
 
 
 async def _after_task_finished(
