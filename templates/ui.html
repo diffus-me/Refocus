@@ -83,6 +83,23 @@
   </head>
   <body>
     <div id="app">
+      <v-dialog v-model="popup.isOpen" width="auto">
+        <v-card border="1000">
+          <v-card-title class="text-h5"> Upgrade Now </v-card-title>
+            <v-card-text class="text-body-1">
+              You have ran out of your credits, please purchase more or upgrade to a higher plan.
+            </v-card-text>
+            <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn color="grey-darken-1" variant="text" @click="popup.isOpen = false">
+              Cancel
+            </v-btn>
+            <v-btn color="green-darken-1" variant="text" @click="openSubscriptionPage">
+              Upgrade
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
       <v-container>
         <v-row class="d-flex flex-row align-end pa-3">
           <div class="d-flex text-h1 font-weight-bold">imagine</div>
@@ -456,7 +473,7 @@
           >
             <v-btn
               v-if="!generating"
-              @click="startToGenerate"
+              @click="startToGenerate(0)"
               width="100%"
               height="56px"
               color="#5a3cff"
@@ -1125,6 +1142,9 @@
                 imageNumber: 2,
             },
             estimateBlipConsume: 2,
+            popup: {
+              isOpen: false,
+            },
           };
         },
         methods: {
@@ -1361,7 +1381,7 @@
             }
             return genParams;
           },
-          startToGenerate(retry = 0) {
+          startToGenerate(retry) {
             if (retry > 5) {
               this.generating = false;
               return;
@@ -1442,6 +1462,11 @@
                 if (this.historyResults.length > this.maxHistory) {
                   this.historyResults.pop();
                 }
+              }
+              if (status.status === "MonitorException.402") {
+                this.popup.isOpen = true;
+                this.stopLoading = false;
+                this.generating = false;
               }
             };
             socket.onerror = (error) => {
@@ -2008,6 +2033,10 @@
             }
             this.estimateBlipConsume = await this.requestCreditsConsumption(args);
           },
+          openSubscriptionPage() {
+            window.open("/user#/subscription?type=subscription", "_blank");
+            this.popup.isOpen = false;
+          }
         },
         created() {
           for (let name of [

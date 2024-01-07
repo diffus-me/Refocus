@@ -1000,6 +1000,15 @@ def create_api(
                             await websocket.send_json(generate_progress.dict())
         except WebSocketDisconnect:
             print("Client disconnected")
+        except system_monitor.MonitorException as error:
+            await websocket.send_json(
+                GenerationProgress(
+                    task_id=error.task_id,
+                    status=f"MonitorException.{error.status_code}",
+                    message=str(error),
+                ).dict()
+            )
+            raise
         finally:
             await websocket.close()
 
