@@ -1073,6 +1073,7 @@
               "lcm": "light-green",
               "realistic": "light-blue",
               "sai": "pink",
+              "turbo": "amber",
             },
             selectedSampler: "dpmpp_2m_sde_gpu",
             availableSamplers: [],
@@ -1702,6 +1703,11 @@
             })
             .catch((error) => {
               console.error('Get default value error:', error);
+              this.selectingPreset = false;
+              this.loadingPreset = false;
+              if (!this.selectedPreset) {
+                this.selectedPreset = "default";
+              }
             });
           },
         },
