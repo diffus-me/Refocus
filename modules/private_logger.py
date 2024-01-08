@@ -6,7 +6,7 @@ import urllib.parse
 
 from PIL import Image
 from modules.util import generate_temp_filename
-
+from modules import script_callbacks
 
 log_cache = {}
 
@@ -28,6 +28,7 @@ def log(img, dic, base_dir: str | None = None):
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
     Image.fromarray(img).save(local_temp_filename)
     html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
+    script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img, filename=local_temp_filename))
 
     css_styles = (
         "<style>"

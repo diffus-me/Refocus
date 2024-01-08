@@ -9,6 +9,16 @@ from gradio import Blocks
 logger = logging.getLogger(__name__)
 exception_records = []
 
+
+class ImageSaveParams:
+    def __init__(self, image, p, filename):
+        self.image = image
+        """the PIL image itself"""
+
+        self.filename = filename
+        """name of file that the image would be saved to"""
+
+
 ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])
 
 callback_map = dict(
@@ -17,6 +27,7 @@ callback_map = dict(
     callbacks_main_loop=[],
     callbacks_before_task=[],
     callbacks_after_task=[],
+    callbacks_image_saved=[],
 )
 
 
@@ -44,6 +55,30 @@ def add_callback(callbacks, fun):
     callbacks.append(ScriptCallback(filename, fun))
 
 
+def app_started_callback(demo: Optional[Blocks], app: FastAPI):
+    invoke_callbacks('callbacks_app_started', demo, app)
+
+
+def before_ui_callback():
+    invoke_callbacks('callbacks_before_ui')
+
+
+def before_task_callback(task_id: str):
+    invoke_callbacks('callbacks_before_task', task_id)
+
+
+def after_task_callback(task_id: str):
+    invoke_callbacks('callbacks_after_task', task_id)
+
+
+def main_loop_callback():
+    invoke_callbacks('callbacks_main_loop')
+
+
+def image_saved_callback(params: ImageSaveParams):
+    invoke_callbacks('callbacks_image_saved', params)
+
+
 def on_app_started(callback):
     """register a function to be called when the webui started, the gradio `Block` component and
     fastapi `FastAPI` object are passed as the arguments"""
@@ -68,21 +103,9 @@ def on_main_loop(callback):
     add_callback(callback_map['callbacks_main_loop'], callback)
 
 
-def app_started_callback(demo: Optional[Blocks], app: FastAPI):
-    invoke_callbacks('callbacks_app_started', demo, app)
-
-
-def before_ui_callback():
-    invoke_callbacks('callbacks_before_ui')
-
-
-def before_task_callback(task_id: str):
-    invoke_callbacks('callbacks_before_task', task_id)
-
-
-def after_task_callback(task_id: str):
-    invoke_callbacks('callbacks_after_task', task_id)
-
-
-def main_loop_callback():
-    invoke_callbacks('callbacks_main_loop')
+def on_image_saved(callback):
+    """register a function to be called after an image is saved to a file.
+    The callback is called with one argument:
+        - params: ImageSaveParams - parameters the image was saved with. Changing fields in this object does nothing.
+    """
+    add_callback(callback_map['callbacks_image_saved'], callback)
