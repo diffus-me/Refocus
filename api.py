@@ -40,6 +40,7 @@ import modules.advanced_parameters as advanced_parameters
 import modules.config
 import modules.flags as flags
 import modules.style_sorter as style_sorter
+from modules.config import convert_ratio, read_preset_and_update_config
 from modules.database import (
     create_tables,
     favorite_an_image,
@@ -54,6 +55,7 @@ from modules.database import (
     unshare_an_image,
     update_focus_task_record,
 )
+from modules.model_loader import load_file_from_url
 
 
 class Settings(BaseSettings):
@@ -61,6 +63,7 @@ class Settings(BaseSettings):
     s3_prefix: str = "http://localhost:7865/file=./api-outputs"
     hostname: str = ""
     output_base_dir: str = "./"
+    preset_dir: str = "./presets"
 
     class Config:
         env_file = ".env"
@@ -322,6 +325,11 @@ class ImagePromptOptions(BaseModel):
     weight: float = Field(description="Weight for controlnet.")
 
 
+class LoraOptions(BaseModel):
+    lora_name: OptionList = Field(description="Lora namei and possible selections.")
+    lora_weight: float = Field(description="Lora weight.")
+
+
 class DefaultOptions(BaseModel):
     hostname: str = Field(description="Base url of the websocket.")
     performances: OptionList = Field(description="Performance options.")
@@ -329,14 +337,20 @@ class DefaultOptions(BaseModel):
     styles: OptionList = Field(description="Style options.")
     base_models: OptionList = Field(description="Avaialable SD checkpoints.")
     refiner_models: OptionList = Field(description="Avaialable refiners.")
-    first_lora_name: OptionList = Field(description="First Lora Name.")
-    first_lora_weight: float = Field(description="First Lora Weight.")
-    num_loras: int = Field(description="Number of Loras.")
+    refiner_switch: float = Field(description="When to switch to a refiner model. Value needs to be between 0.0 ~ 1.0")
+    loras: list[LoraOptions] = Field(description="Lora options.")
     uovs: OptionList = Field(description="Upscale or variation options.")
     ip_types: OptionList = Field(description="Image prompt Control Types.")
     ip_default_options: dict[str, ImagePromptOptions] = Field(description="Image prompt default options.")
     num_image_prompts: int = Field(description="Number of image prompts.")
     content_types: OptionList = Field(description="Content types for describe image.")
+    cfg_scale: float = Field(description="Guidance scale.")
+    sample_sharpness: float = Field(description="Image sharpness.")
+    sampler: OptionList = Field(description="Sampler options.")
+    scheduler: OptionList = Field(description="Scheduler options.")
+    prompt: str = Field(description="Default prompt for generation.")
+    negative_prompt: str = Field(description="Default negative prompt for generation.")
+    presets: OptionList = Field(description="Presets for settings for a specific genre.")
 
 
 class Like(BaseModel):
@@ -745,6 +759,30 @@ def get_hostname(request: Request, hostname_from_setting: str) -> str:
     return ""
 
 
+async def list_presets(path: str) -> list[str]:
+    if await aiofiles.os.path.exists(path):
+        return [
+            filename.removesuffix(".json") for filename in await aiofiles.os.listdir(path) if filename.endswith(".json")
+        ]
+    return []
+
+
+async def download_models(models: dict[str, str], model_dir: str):
+    for file_name, url in models.items():
+        if file_name and url:
+            await asyncio.to_thread(load_file_from_url, url=url, model_dir=model_dir, file_name=file_name)
+
+
+async def download_all_necessary_models(config_dict: dict):
+    await download_models(
+        config_dict.get("checkpoint_downloads", modules.config.checkpoint_downloads), modules.config.path_checkpoints
+    )
+    await download_models(
+        config_dict.get("embeddings_downloads", modules.config.embeddings_downloads), modules.config.path_embeddings
+    )
+    await download_models(config_dict.get("lora_downloads", modules.config.lora_downloads), modules.config.path_loras)
+
+
 def create_api(
     app: FastAPI,
     generate_clicked: Callable,
@@ -958,30 +996,48 @@ def create_api(
             return result
 
     @app.get("/api/focus/default_options", response_model=DefaultOptions, response_class=JSONResponse)
-    async def get_default_options(request: Request, user_id: Annotated[str | None, Header()] = "local"):
+    async def get_default_options(
+        request: Request, preset: str = "default", user_id: Annotated[str | None, Header()] = "local"
+    ):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
+        config_dict = copy.deepcopy(modules.config.config_dict)
+        config_dict = await asyncio.to_thread(read_preset_and_update_config, preset, config_dict)
+        lora_options = [
+            LoraOptions(
+                lora_name=OptionList(default=lora_name, options=["None"] + modules.config.lora_filenames),
+                lora_weight=lora_weight,
+            )
+            for lora_name, lora_weight in config_dict.get("default_loras", modules.config.default_loras)
+        ]
+        await download_all_necessary_models(config_dict)
         return DefaultOptions(
             hostname=get_hostname(request, settings.hostname),
-            performances=OptionList(default=modules.config.default_performance, options=flags.performance_selections),
+            performances=OptionList(
+                default=config_dict.get("default_performance", modules.config.default_performance),
+                options=flags.performance_selections,
+            ),
             aspect_ratios=OptionList(
-                default=modules.config.default_simplified_aspect_ratio,
-                options=modules.config.available_simplified_aspect_ratios,
+                default=convert_ratio(config_dict.get("default_aspect_ratio", modules.config.default_aspect_ratio)),
+                options=[
+                    convert_ratio(x)
+                    for x in config_dict.get("available_aspect_ratios", modules.config.available_aspect_ratios)
+                ],
             ),
             styles=OptionList(
-                default_list=list(modules.config.default_styles), options=copy.deepcopy(style_sorter.all_styles)
+                default_list=list(config_dict.get("default_styles", modules.config.default_styles)),
+                options=copy.deepcopy(style_sorter.all_styles),
             ),
             base_models=OptionList(
-                default=modules.config.default_base_model_name, options=modules.config.model_filenames
+                default=config_dict.get("default_model", modules.config.default_base_model_name),
+                options=config_dict.get("model_filenames", modules.config.model_filenames),
             ),
             refiner_models=OptionList(
-                default=modules.config.default_refiner_model_name, options=modules.config.model_filenames
+                default=config_dict.get("default_refiner", modules.config.default_refiner_model_name),
+                options=["None"] + config_dict.get("refiner_filenames", modules.config.model_filenames),
             ),
-            first_lora_name=OptionList(
-                default=modules.config.default_loras[0][0], options=["None"] + modules.config.lora_filenames
-            ),
-            first_lora_weight=modules.config.default_loras[0][1],
-            num_loras=len(modules.config.default_loras),
+            refiner_switch=config_dict.get("default_refiner_switch", modules.config.default_refiner_switch),
+            loras=lora_options,
             uovs=OptionList(default=flags.disabled, options=flags.uov_list),
             ip_types=OptionList(default=flags.default_ip, options=flags.ip_list),
             ip_default_options={
@@ -994,6 +1050,18 @@ def create_api(
             content_types=OptionList(
                 default=flags.desc_type_photo, options=[flags.desc_type_photo, flags.desc_type_anime]
             ),
+            cfg_scale=config_dict.get("default_cfg_scale", modules.config.default_cfg_scale),
+            sample_sharpness=config_dict.get("default_sample_sharpness", modules.config.default_sample_sharpness),
+            sampler=OptionList(
+                default=config_dict.get("default_sampler", modules.config.default_sampler), options=flags.sampler_list
+            ),
+            scheduler=OptionList(
+                default=config_dict.get("default_scheduler", modules.config.default_scheduler),
+                options=flags.scheduler_list,
+            ),
+            prompt=config_dict.get("default_prompt", modules.config.default_prompt),
+            negative_prompt=config_dict.get("default_prompt_negative", modules.config.default_prompt_negative),
+            presets=OptionList(default="default", options=await list_presets(settings.preset_dir)),
         )
 
     @app.post("/api/focus/like", response_class=JSONResponse)
