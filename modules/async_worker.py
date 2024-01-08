@@ -180,7 +180,7 @@ def worker():
             print(f'Refiner disabled because base model and refiner are same.')
             refiner_model_name = 'None'
 
-        assert performance_selection in ['Speed', 'Quality', 'Extreme Speed']
+        assert performance_selection in ['Speed', 'Quality', 'Extreme Speed', 'Turbo']
 
         steps = 30
 
@@ -189,6 +189,9 @@ def worker():
 
         if performance_selection == 'Quality':
             steps = 60
+
+        if performance_selection == 'Turbo':
+            steps = 5
 
         if performance_selection == 'Extreme Speed':
             print('Enter LCM mode.')
@@ -280,6 +283,9 @@ def worker():
 
                         if performance_selection == 'Extreme Speed':
                             steps = 8
+
+                        if performance_selection == 'Turbo':
+                            steps = 5
 
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()

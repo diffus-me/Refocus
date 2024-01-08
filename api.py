@@ -1010,12 +1010,16 @@ def create_api(
             )
             for lora_name, lora_weight in config_dict.get("default_loras", modules.config.default_loras)
         ]
+        performance = config_dict.get("default_performance", modules.config.default_performance)
+        performance_selections = copy.deepcopy(flags.performance_selections)
+        if performance not in performance_selections:
+            performance_selections.append(performance)
         await download_all_necessary_models(config_dict)
         return DefaultOptions(
             hostname=get_hostname(request, settings.hostname),
             performances=OptionList(
-                default=config_dict.get("default_performance", modules.config.default_performance),
-                options=flags.performance_selections,
+                default=performance,
+                options=performance_selections,
             ),
             aspect_ratios=OptionList(
                 default=convert_ratio(config_dict.get("default_aspect_ratio", modules.config.default_aspect_ratio)),
