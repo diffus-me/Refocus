@@ -1,6 +1,6 @@
 # Refocus - Alternative ui for Fooocus with many improvements
 
-![Refocus UI](https://raw.githubusercontent.com/diffus-me/Refocus/update_readme/assets/20240103-200016.jpeg)
+![Refocus UI](https://raw.githubusercontent.com/diffus-me/Refocus/vue/assets/20240103-200016.jpeg)
 
 ## Use in a Virtual Environment
 
