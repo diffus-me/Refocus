@@ -450,7 +450,13 @@
             cols="12"
           >
             <v-btn
-              v-if="!generating" @click="startToGenerate" width="100%" height="56px" color="#5a3cff">Generate</v-btn>
+              v-if="!generating"
+              @click="startToGenerate"
+              width="100%"
+              height="56px"
+              color="#5a3cff"
+              :disabled="loadingPreset"
+            >Generate</v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
             <v-col class="d-flex pa-0 mr-1">
               <v-btn @click="skipGeneration" :loading="skipLoading" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
@@ -467,7 +473,37 @@
         <!-- Options Section -->
         <v-expansion-panels>
           <v-expansion-panel>
-            <v-expansion-panel-title expand-icon="mdi-tune" collapse-icon="mdi-tune">Options</v-expansion-panel-title>
+            <v-expansion-panel-title
+              expand-icon="mdi-tune"
+              collapse-icon="mdi-tune"
+            >Options<v-chip
+                v-show="!selectingPreset && !loadingPreset"
+                class="ma-2"
+                :color="presetColor[selectedPreset]"
+                @click.stop="selectingPreset = true"
+              >
+                [[ presetName[selectedPreset] ]]
+              </v-chip>
+              <div
+                v-show="selectingPreset && !loadingPreset"
+              >
+                <v-chip
+                  v-for="preset in availablePresets"
+                  class="ma-2"
+                  :key="preset"
+                  :color="presetColor[preset]"
+                  @click.stop="updateDefaultOptions(preset)"
+                >
+                  [[ presetName[preset] ]]
+                </v-chip>
+              </div>
+              <v-progress-circular
+                v-show="loadingPreset"
+                class="ma-2"
+                indeterminate
+                color="#5a3cff"
+              ></v-progress-circular>
+            </v-expansion-panel-title>
             <v-expansion-panel-text>
               <v-tabs vertical v-model="settingTab">
                 <v-tab value="settings">Settings</v-tab>
@@ -543,30 +579,83 @@
                 </v-window-item>
                 <v-window-item  value="models">
                   <v-row>
-                    <v-col>
+                    <v-col
+                      cols="12"
+                    >
                       <v-select
                         v-model="baseModel"
                         label="Base Model (SDXL only)"
                         :items="baseModels"
                       ></v-select>
                     </v-col>
-                    <v-col>
+                  </v-row>
+                  <v-row>
+                    <v-col
+                      xxl="6"
+                      xl="6"
+                      lg="6"
+                      md="6"
+                      sm="12"
+                      cols="12"
+                    >
                       <v-select
                         v-model="refiner"
                         label="Refiner (SDXL)"
                         :items="refiners"
                       ></v-select>
                     </v-col>
+                    <v-col
+                      xxl="6"
+                      xl="6"
+                      lg="6"
+                      md="6"
+                      sm="12"
+                      cols="12"
+                    >
+                      <v-slider
+                        v-model="refinerSwitch"
+                        :min="0"
+                        :max="1.0"
+                        :step="0.0001"
+                        label="Refiner Switch At"
+                        :disabled="refiner === 'None'"
+                      >
+                        <template v-slot:append>
+                          <v-text-field
+                            v-model="refinerSwitch"
+                            hide-details
+                            single-line
+                            density="compact"
+                            type="number"
+                            style="width: 70px"
+                          ></v-text-field>
+                        </template>
+                      </v-slider>
+                    </v-col>
                   </v-row>
                   <v-row v-for="n in numLoras" :key="n-1">
-                    <v-col>
+                    <v-col
+                      xxl="6"
+                      xl="6"
+                      lg="6"
+                      md="6"
+                      sm="12"
+                      cols="12"
+                    >
                       <v-select
                         v-model="selectedLoraModels[n-1]"
                         :label="`LoRA ${n}`"
                         :items="loraModels"
                       ></v-select>
                     </v-col>
-                    <v-col>
+                    <v-col
+                      xxl="6"
+                      xl="6"
+                      lg="6"
+                      md="6"
+                      sm="12"
+                      cols="12"
+                    >
                       <v-slider
                         v-model="selectedLoraWeights[n-1]"
                         :min="-2"
@@ -909,14 +998,13 @@
             baseModels: [],
             refiner: '',
             refiners: [],
+            refinerSwitch: 0.5,
             loraModels: [],
-            firstLoraName: '',
-            firstLoraWeight: 0,
             numLoras: 0,
             selectedLoraModels: [],
             selectedLoraWeights: [],
-            guidanceScale: 4,
-            imageSharpness: 2,
+            guidanceScale: 4.0,
+            imageSharpness: 2.0,
             defaultOptions: {},
             runningTaskId: '',
             runningTaskStatus: '',
@@ -971,6 +1059,25 @@
             toolObserver: null,
             optionsObserver: null,
             describeImageLoading: false,
+            selectedPreset: "",
+            availablePresets: [],
+            selectingPreset: false,
+            loadingPreset: false,
+            presetName: {
+              "default": "cinematic",
+              "sai": "stability ai",
+            },
+            presetColor: {
+              "default": "green",
+              "anime": "deep-orange",
+              "lcm": "light-green",
+              "realistic": "light-blue",
+              "sai": "pink",
+            },
+            selectedSampler: "dpmpp_2m_sde_gpu",
+            availableSamplers: [],
+            selectedScheduler: "karras",
+            availableSchedulers: [],
           };
         },
         methods: {
@@ -1109,6 +1216,10 @@
                 return {name: key, value: lorasHtml};
               } else if (key === 'style_selections') {
                 return {name: key, value: obj[key].join(', ')};
+              } else if (key === 'advanced_options') {
+                  return {name: key, value: Object.keys(obj[key]).map(secondaryKey => {
+                    return `${secondaryKey}: ${obj[key][secondaryKey]}`;
+                  }).join('\n')};
               } else if (obj[key]) {
                 return {name: key, value: obj[key]};
               }
@@ -1130,8 +1241,15 @@
               loras: this.selectedLoraModels.map((model, index) => ({
                 lora_model: model,
                 lora_weight: this.selectedLoraWeights[index]
-              }))
+              })),
+              advanced_options: {
+                sampler_name: this.selectedSampler,
+                scheduler_name: this.selectedScheduler,
+              }
             };
+            if (this.refiner !== "None") {
+              genParams.refiner_switch = this.refinerSwitch;
+            }
             if (this.showImageOptions) {
               if (this.imageOptionTab === "uov") {
                 if (this.uovImageFile) {
@@ -1499,69 +1617,96 @@
             this.imagePrompts[index].params.stopAt = this.imagePromptDefaultValues[styleType].stop;
             this.imagePrompts[index].params.weight = this.imagePromptDefaultValues[styleType].weight;
           },
+          updateDefaultOptions(preset, callback=null) {
+            this.loadingPreset = true;
+            if (this.selectedPreset === preset) {
+              this.selectingPreset = false;
+              this.loadingPreset = false;
+              return;
+            }
+            fetch("/api/focus/default_options?" + new URLSearchParams({
+                preset: preset,
+              }), {
+              method: 'GET',
+            })
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((options) => {
+              this.defaultOptions = options;
+              this.hostname = options.hostname;
+              this.performanceOptions = options.performances.options;
+              this.performance = options.performances.default;
+              this.aspectRatios = options.aspect_ratios.options;
+              this.aspectRatio = options.aspect_ratios.default;
+              this.styles = options.styles.options;
+              this.selectedStyles = options.styles.default_list;
+              this.baseModels = options.base_models.options;
+              this.baseModel = options.base_models.default;
+              this.refiners = options.refiner_models.options;
+              this.refiner = options.refiner_models.default;
+              this.refinerSwitch = options.refiner_switch;
+              this.numLoras = options.loras.length;
+              this.uovMethods = options.uovs.options;
+              this.uovSelection = options.uovs.default;
+              this.ipTypes = options.ip_types.options;
+              this.numImagePrompts = options.num_image_prompts;
+              this.contentTypeSelection = options.content_types.default;
+              this.contentTypes = options.content_types.options;
+              this.imagePromptDefaultValues = options.ip_default_options;
+              this.selectedLoraModels = [];
+              this.selectedLoraWeights = [];
+              for (let i = 0; i < this.numLoras; i++) {
+                this.selectedLoraModels.push(options.loras[i].lora_name.default);
+                this.selectedLoraWeights.push(options.loras[i].lora_weight);
+                this.loraModels = options.loras[i].lora_name.options;
+              }
+              for (let i = 0; i < this.numImagePrompts; i++) {
+                this.imagePrompts.push({
+                  params: {
+                    stopAt: options.ip_default_options[options.ip_types.default].stop,
+                    weight: options.ip_default_options[options.ip_types.default].weight,
+                    controlType: options.ip_types.default,
+                  },
+                });
+                this.imagePromptImages.push(null);
+              }
+              this.selectedPreset = preset;
+              this.availablePresets = options.presets.options;
+              for (const presetName of this.availablePresets) {
+                if (!(presetName in this.presetName)) {
+                  this.presetName[presetName] = presetName;
+                }
+                if (!(presetName in this.presetColor)) {
+                  this.presetColor[presetName] = "grey-darken-1";
+                }
+              }
+              this.guidanceScale = options.cfg_scale;
+              this.imageSharpness = options.sample_sharpness;
+              this.selectedSampler = options.sampler.default;
+              this.availableSamplers = options.sampler.options;
+              this.selectedScheduler = options.scheduler.default;
+              this.availableSchedulers = options.scheduler.options;
+              if (options.prompt) {
+                this.prompt = options.prompt;
+              }
+              this.negativePrompt = options.negative_prompt;
+              this.selectingPreset = false;
+              this.loadingPreset = false;
+              if (typeof callback === "function") {
+                callback(options);
+              }
+            })
+            .catch((error) => {
+              console.error('Get default value error:', error);
+            });
+          },
         },
         mounted() {
-          fetch("/api/focus/default_options", {
-            method: 'GET',
-          })
-          .then(response => {
-            if (response.status === 200) {
-              return response.json();
-            }
-            return Promise.reject(response);
-          })
-          .then((options) => {
-            this.defaultOptions = options;
-            this.hostname = options.hostname;
-            this.performanceOptions = options.performances.options;
-            this.performance = options.performances.default;
-            this.aspectRatios = options.aspect_ratios.options;
-            this.aspectRatio = options.aspect_ratios.default;
-            this.styles = options.styles.options;
-            this.selectedStyles = options.styles.default_list;
-            this.baseModels = options.base_models.options;
-            this.baseModel = options.base_models.default;
-            this.refiners = options.refiner_models.options;
-            this.refiner = options.refiner_models.default;
-            this.loraModels = options.first_lora_name.options;
-            this.firstLoraName = options.first_lora_name.default;
-            this.firstLoraWeight = options.first_lora_weight;
-            this.numLoras = options.num_loras;
-            this.uovMethods = options.uovs.options;
-            this.uovSelection = options.uovs.default;
-            this.ipTypes = options.ip_types.options;
-            this.numImagePrompts = options.num_image_prompts;
-            this.contentTypeSelection = options.content_types.default;
-            this.contentTypes = options.content_types.options;
-            this.imagePromptDefaultValues = options.ip_default_options;
-            this.selectedLoraModels = [];
-            this.selectedLoraWeights = [];
-            for (let i = 0; i < this.numLoras; i++) {
-              if (i === 0) {
-                this.selectedLoraModels.push(this.firstLoraName);
-                this.selectedLoraWeights.push(this.firstLoraWeight);
-              } else {
-                this.selectedLoraModels.push("None");
-                this.selectedLoraWeights.push(1.0);
-              }
-            }
-            for (let i = 0; i < this.numImagePrompts; i++) {
-              this.imagePrompts.push({
-                params: {
-                  stopAt: options.ip_default_options[options.ip_types.default].stop,
-                  weight: options.ip_default_options[options.ip_types.default].weight,
-                  controlType: options.ip_types.default,
-                },
-              });
-            }
-            for (let i = 0; i < this.numImagePrompts; i++) {
-              this.imagePromptImages.push(null);
-            }
-            this.initializeFilerobot();
-          })
-          .catch((error) => {
-            console.error('Get default value error:', error);
-          });
+          this.updateDefaultOptions("default", this.initializeFilerobot);
         },
       }).use(vuetify).mount('#app');
     </script>

@@ -81,7 +81,7 @@ try_load_deprecated_user_path_config()
 
 preset = args_manager.args.preset
 
-if isinstance(preset, str):
+def read_preset_and_update_config(preset: str, config_dict: dict) -> dict:
     preset_path = os.path.abspath(f'./presets/{preset}.json')
     try:
         if os.path.exists(preset_path):
@@ -93,6 +93,9 @@ if isinstance(preset, str):
     except Exception as e:
         print(f'Load preset [{preset_path}] failed')
         print(e)
+    return config_dict
+
+config_dict = read_preset_and_update_config(preset, config_dict)
 
 
 def get_dir_or_set_default(key, default_value):
