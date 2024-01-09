@@ -20,6 +20,7 @@ import copy
 import logging
 import uuid
 import asyncio
+from typing import Any
 
 from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
@@ -32,7 +33,7 @@ from api import settings, Status, QueuingStatus, Progress, create_api
 logger = logging.getLogger("uvicorn.error")
 
 
-async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''):
+async def generate_clicked(*args, base_dir: str | None = None, task_id: str = '', metadata: dict[str, Any] | None = None):
     import ldm_patched.modules.model_management as model_management
     if not task_id:
         task_id = str(uuid.uuid4())
@@ -43,7 +44,7 @@ async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''
     # outputs=[progress_html, progress_window, progress_gallery, gallery]
 
     execution_start_time = time.perf_counter()
-    task = worker.AsyncTask(task_id=task_id, args=list(args), base_dir=base_dir)
+    task = worker.AsyncTask(task_id=task_id, args=list(args), base_dir=base_dir, metadata=metadata)
     finished = False
 
     yield Progress(flag='preparing', task_id=task_id, status=Status(percentage=1, title='Waiting for task to start ...', images=[]))
@@ -92,10 +93,10 @@ async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''
                     flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
             if flag == 'results':
                 yield Progress(
-                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths))
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
             if flag == 'finish':
                 yield Progress(
-                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths))
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
                 finished = True
             if flag == 'skipped':
                 percentage, title = product
@@ -192,10 +193,10 @@ async def recover_task(task_id: str):
                     flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
             if flag == 'results':
                 yield Progress(
-                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths))
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
             if flag == 'finish':
                 yield Progress(
-                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths))
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
                 finished = True
             if flag == 'skipped':
                 percentage, title = product
