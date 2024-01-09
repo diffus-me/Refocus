@@ -11,7 +11,7 @@ exception_records = []
 
 
 class ImageSaveParams:
-    def __init__(self, image, p, filename):
+    def __init__(self, image, filename):
         self.image = image
         """the PIL image itself"""
 
@@ -92,7 +92,7 @@ def on_before_ui(callback):
 
 
 def on_before_task(callback):
-    add_callback(callback_map['callbacks_after_task'], callback)
+    add_callback(callback_map['callbacks_before_task'], callback)
 
 
 def on_after_task(callback):
