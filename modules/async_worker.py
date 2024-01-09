@@ -1,16 +1,18 @@
 import threading
 from modules import script_callbacks
+from typing import Any
 
 
 class AsyncTask:
-    def __init__(self, task_id, args, base_dir: str | None = None):
+    def __init__(self, task_id, args, base_dir: str | None = None, metadata: dict[str, Any] | None = None):
         self.task_id = task_id
         self.args = args
         self.yields = []
         self.results = []
         self.result_paths = []
+        self.is_nsfw = []
         self.base_dir: str | None = base_dir
-
+        self.metadata = metadata
 
 async_tasks: list[AsyncTask] = []
 running_task: AsyncTask | None = None
@@ -65,7 +67,13 @@ def worker(app):
         print(f'[Fooocus] {text}')
         async_task.yields.append(['preview', (number, text, None)])
 
-    def yield_result(async_task, imgs, do_not_show_finished_images=False, img_paths: str | list | None = None):
+    def yield_result(
+        async_task,
+        imgs,
+        do_not_show_finished_images=False,
+        img_paths: str | list | None = None,
+        is_nsfw: bool | list[bool] | None = None
+    ):
         if not isinstance(imgs, list):
             imgs = [imgs]
 
@@ -75,6 +83,12 @@ def worker(app):
             if not isinstance(img_paths, list):
                 img_paths = [img_paths]
             async_task.result_paths = async_task.result_paths + img_paths
+
+
+        if is_nsfw is not None:
+            if not isinstance(is_nsfw, list):
+                is_nsfw = [is_nsfw]
+            async_task.is_nsfw = async_task.is_nsfw + is_nsfw
 
         if do_not_show_finished_images:
             return
@@ -531,8 +545,8 @@ def worker(app):
 
             if direct_return:
                 d = [('Upscale (Fast)', '2x')]
-                logged_image_path = log(uov_input_image, d, base_dir=async_task.base_dir)
-                yield_result(async_task, uov_input_image, do_not_show_finished_images=True, img_paths=logged_image_path)
+                is_nsfw, target_image, logged_image_path = log(uov_input_image, d, async_task=async_task)
+                yield_result(async_task, target_image, do_not_show_finished_images=True, img_paths=logged_image_path, is_nsfw=is_nsfw)
                 return
 
             tiled = True
@@ -795,6 +809,8 @@ def worker(app):
                     imgs = [inpaint_worker.current_task.post_process(x) for x in imgs]
 
                 img_paths = []
+                target_images = []
+                is_nsfw_list = []
                 for x in imgs:
                     d = [
                         ('Prompt', task['log_positive_prompt']),
@@ -820,10 +836,18 @@ def worker(app):
                         if n != 'None':
                             d.append((f'LoRA {li + 1}', f'{n} : {w}'))
                     d.append(('Version', 'v' + fooocus_version.version))
-                    logged_image_path = log(x, d, base_dir=async_task.base_dir)
+                    is_nsfw, target_image, logged_image_path = log(x, d, async_task=async_task)
                     img_paths.append(logged_image_path)
+                    target_images.append(target_image)
+                    is_nsfw_list.append(is_nsfw)
 
-                yield_result(async_task, imgs, do_not_show_finished_images=len(tasks) == 1, img_paths=img_paths)
+                yield_result(
+                    async_task,
+                    target_images,
+                    do_not_show_finished_images=len(tasks) == 1,
+                    img_paths=img_paths,
+                    is_nsfw=is_nsfw_list,
+                )
             except ldm_patched.modules.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')

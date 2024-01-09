@@ -82,6 +82,7 @@ class Status(BaseModel):
     title: str = ""
     images: list[np.ndarray] = []
     image_filepaths: list[str] = []
+    is_nsfw: list[bool] = []
 
     class Config:
         arbitrary_types_allowed = True
@@ -671,6 +672,7 @@ class GenerationProgress(BaseModel):
     message: str = Field(default="", description="Message of the current task.")
     is_url: bool = Field(default=False, description="Whether the result is a url.")
     images: list[ImageResult] = Field(default=[], description="Preview or result images")
+    is_nsfw: list[bool] = Field(default=[], description="Whether the result images are nsfw.")
     queue_length: int | None = Field(default=None, description="Queue length of the current task.")
     queue_position: int | None = Field(default=None, description="Queue position of the current task.")
 
@@ -728,6 +730,7 @@ async def extract_progress(progress: Progress, is_url: bool, user_id: str, start
         images=images,
         queue_length=queue_length,
         queue_position=queue_position,
+        is_nsfw=progress.status.is_nsfw,
     )
 
 
@@ -980,7 +983,10 @@ def create_api(
                     ):
                         args = await prepare_args_for_generate(generation_option, user_id)
                         async for progress in generate_clicked(
-                            *args, base_dir=output_dir, task_id=generation_option.task_id
+                            *args,
+                            base_dir=output_dir,
+                            task_id=generation_option.task_id,
+                            metadata=request_headers,
                         ):
                             previous_status = await update_database(
                                 progress, previous_status, user_id, generation_option

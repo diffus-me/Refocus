@@ -4,9 +4,15 @@ import modules.config
 import json
 import urllib.parse
 
+import numpy as np
 from PIL import Image
 from modules.util import generate_temp_filename
+from modules.nsfw import nsfw_blur
 from modules import script_callbacks
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.async_worker import AsyncTask
 
 log_cache = {}
 
@@ -19,16 +25,26 @@ def get_current_html_path(base_dir: str | None = None):
     return html_name
 
 
-def log(img, dic, base_dir: str | None = None):
+def log(img, dic, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
-        return
+        return False, img, None
 
-    folder = base_dir or modules.config.path_outputs
+    folder = async_task.base_dir or modules.config.path_outputs
     date_string, local_temp_filename, only_name = generate_temp_filename(folder=folder, extension='png')
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
-    Image.fromarray(img).save(local_temp_filename)
     html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
-    script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img, filename=local_temp_filename))
+
+    pil_image = Image.fromarray(img)
+    blured_image = nsfw_blur(pil_image, async_task)
+
+    if blured_image:
+        is_nsfw = True
+        img = np.array(blured_image)
+    else:
+        is_nsfw = False
+        pil_image.save(local_temp_filename)
+        script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img, filename=local_temp_filename))
+
 
     css_styles = (
         "<style>"
@@ -108,4 +124,4 @@ def log(img, dic, base_dir: str | None = None):
 
     log_cache[html_name] = middle_part
 
-    return local_temp_filename
+    return is_nsfw, img, local_temp_filename
