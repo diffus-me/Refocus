@@ -43,4 +43,12 @@ except Exception as e:
     print(str(e))
 
 print('Update succeeded.')
-from launch import *
+
+
+def main():
+    import launch
+    launch.launch()
+
+
+if __name__ == '__main__':
+    main()

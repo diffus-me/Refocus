@@ -94,16 +94,20 @@ def ini_args():
     return args
 
 
-prepare_environment()
-build_launcher()
-args = ini_args()
+def launch(server_port: int = 0):
+    import webui
+    prepare_environment()
+    build_launcher()
+    args = ini_args()
+
+    if args.gpu_device_id is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
+        print("Set device to:", args.gpu_device_id)
+
+    download_models()
+
+    webui.start(server_port)
 
 
-if args.gpu_device_id is not None:
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
-    print("Set device to:", args.gpu_device_id)
-
-
-download_models()
-
-from webui import *
+if __name__ == '__main__':
+    launch()
