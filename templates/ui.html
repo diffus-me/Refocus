@@ -86,9 +86,7 @@
       <v-dialog v-model="popup.isOpen" width="auto">
         <v-card border="1000">
           <v-card-title class="text-h5"> Upgrade Now </v-card-title>
-            <v-card-text class="text-body-1">
-              You have ran out of your credits, please purchase more or upgrade to a higher plan.
-            </v-card-text>
+            <v-card-text class="text-body-1"> [[popup.message]] </v-card-text>
             <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn color="grey-darken-1" variant="text" @click="popup.isOpen = false">
@@ -1144,6 +1142,7 @@
             estimateBlipConsume: 2,
             popup: {
               isOpen: false,
+              message: "",
             },
           };
         },
@@ -1439,6 +1438,10 @@
                   this.runningTaskResultImages = status.images.map(item => {
                     return {src: item.encoded_image, id: item.image_id}});
                 }
+                if (status.is_nsfw.length > 0 && status.is_nsfw[status.is_nsfw.length - 1]) {
+                    this.popup.message = "Potential NSFW content was detected in the generated image, upgrade to enable your private image storage.";
+                    this.popup.isOpen = true;
+                }
               }
               if (status.status === "skipped") {
                 this.skipLoading = false;
@@ -1464,6 +1467,7 @@
                 }
               }
               if (status.status === "MonitorException.402") {
+                this.popup.message = "You have ran out of your credits, please purchase more or upgrade to a higher plan.";
                 this.popup.isOpen = true;
                 this.stopLoading = false;
                 this.generating = false;
