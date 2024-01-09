@@ -358,10 +358,8 @@ def skip_clicked(task_id: str):
             return True
     return False
 
+def make_ui():
 
-script_callbacks.before_ui_callback()
-
-with shared.gradio_root:
     with gr.Row():
         with gr.Column(scale=2):
             task_id = gr.Textbox(label='Task ID', value='', visible=False, elem_id='task_id')
@@ -700,7 +698,7 @@ with shared.gradio_root:
                                                                  '(default is 0, always process before any mask invert)')
                         inpaint_mask_upload_checkbox = gr.Checkbox(label='Enable Mask Upload', value=False)
                         invert_mask_checkbox = gr.Checkbox(label='Invert Mask', value=False)
-                        
+
                         inpaint_ctrls = [debugging_inpaint_preprocessor, inpaint_disable_initial_latent, inpaint_engine,
                                          inpaint_strength, inpaint_respective_field,
                                          inpaint_mask_upload_checkbox, invert_mask_checkbox, inpaint_erode_or_dilate]
@@ -876,6 +874,8 @@ with shared.gradio_root:
         desc_btn.click(trigger_describe, inputs=[desc_method, desc_input_image],
                        outputs=[prompt, style_selections], show_progress=True, queue=True)
 
+    return refresh_seed, trigger_describe
+
 
 def dump_default_english_config():
     from modules.localization import dump_english_config
@@ -884,22 +884,22 @@ def dump_default_english_config():
 
 # dump_default_english_config()
 
-app, _, _ = shared.gradio_root.launch(
-    inbrowser=False,
-    server_name=args_manager.args.listen,
-    server_port=args_manager.args.port,
-    share=args_manager.args.share,
-    auth=check_auth if args_manager.args.share and auth_enabled else None,
-    blocked_paths=[constants.AUTH_FILENAME],
-    prevent_thread_lock=True,
-    app_kwargs={
-        "docs_url": "/docs",
-        "redoc_url": "/redoc",
-    },
-)
 
-app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
-script_callbacks.app_started_callback(None, app)
+def launch_app(server_port):
+    app, _, _ = shared.gradio_root.launch(
+        inbrowser=False,
+        server_name=args_manager.args.listen,
+        server_port=server_port,
+        share=args_manager.args.share,
+        auth=check_auth if args_manager.args.share and auth_enabled else None,
+        blocked_paths=[constants.AUTH_FILENAME],
+        prevent_thread_lock=True,
+        app_kwargs={
+            "docs_url": "/docs",
+            "redoc_url": "/redoc",
+        },
+    )
+    return app
 
 
 async def block_thread():
@@ -914,4 +914,17 @@ async def block_thread():
             shared.gradio_root.close()
 
 
-asyncio.run(block_thread())
+def start(server_port: int = 0):
+    if server_port == 0:
+        server_port = args_manager.args.port
+    script_callbacks.before_ui_callback()
+    with shared.gradio_root:
+        refresh_seed, trigger_describe = make_ui()
+    app = launch_app(server_port)
+    app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
+    worker.start(app)
+    asyncio.run(block_thread())
+
+
+if __name__ == '__main__':
+    start()

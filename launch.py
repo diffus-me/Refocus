@@ -74,17 +74,7 @@ def ini_args():
     return args
 
 
-prepare_environment()
-build_launcher()
-args = ini_args()
-
-
-if args.gpu_device_id is not None:
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
-    print("Set device to:", args.gpu_device_id)
-
-
-def download_models():
+def download_models(args):
     for file_name, url in vae_approx_filenames:
         load_file_from_url(url=url, model_dir=config.path_vae_approx, file_name=file_name)
 
@@ -120,7 +110,20 @@ def download_models():
     return
 
 
-download_models()
+def launch(server_port: int = 0):
+    import webui
+    prepare_environment()
+    build_launcher()
+    args = ini_args()
+
+    if args.gpu_device_id is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
+        print("Set device to:", args.gpu_device_id)
+
+    download_models(args)
+
+    webui.start(server_port)
 
 
-from webui import *
+if __name__ == '__main__':
+    launch()
