@@ -2,6 +2,7 @@ import os
 import json
 import math
 import numbers
+from typing import Any
 import args_manager
 import modules.flags
 import modules.sdxl_styles
@@ -138,7 +139,7 @@ path_fooocus_expansion = get_dir_or_set_default('path_fooocus_expansion', '../mo
 path_outputs = get_dir_or_set_default('path_outputs', '../outputs/')
 
 
-def get_config_item_or_set_default(key, default_value, validator, disable_empty_as_none=False):
+def get_config_item_or_set_default(key, default_value, validator, disable_empty_as_none=False) -> Any:
     global config_dict, visited_keys
 
     if key not in visited_keys:
