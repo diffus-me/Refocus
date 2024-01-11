@@ -1267,7 +1267,7 @@
           },
           packGenerationParameters() {
             let genParams = {
-              task_id: randomId(),
+              task_id: this.runningTaskId,
               prompt: this.prompt,
               negative_prompt: this.negativePrompt,
               style_selections: this.selectedStyles,
@@ -1364,7 +1364,10 @@
                 task_id: this.runningTaskId,
               }));
             } else {
-              socket = new WebSocket(`${wsProtocol}://${this.hostname}/api/focus/ws/generate`);
+              this.runningTaskId = randomId();
+              socket = new WebSocket(`${wsProtocol}://${this.hostname}/api/focus/ws/generate?` + new URLSearchParams({
+                new_task_id: this.runningTaskId,
+              }));
             }
             this.generating = true;
             this.runningTaskMessage = "Preparing...";
@@ -1378,7 +1381,6 @@
             };
             socket.onmessage = (event) => {
               const status = JSON.parse(event.data);
-              this.runningTaskId = status.task_id;
               this.runningTaskStatus = status.status;
               this.runningTaskProgress = status.progress;
               this.runningTaskMessage = status.message;
