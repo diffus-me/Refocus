@@ -1,7 +1,7 @@
 import inspect
 import logging
 from collections import namedtuple
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import FastAPI
 from gradio import Blocks
@@ -11,12 +11,15 @@ exception_records = []
 
 
 class ImageSaveParams:
-    def __init__(self, image, filename):
+    def __init__(self, image, filename, task_metadata: Optional[dict[str, Any]]):
         self.image = image
         """the PIL image itself"""
 
         self.filename = filename
         """name of file that the image would be saved to"""
+
+        self.task_metadata = task_metadata
+        """task metadata from request"""
 
 
 ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])
