@@ -309,7 +309,7 @@ def worker(app):
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
-                
+
                 if advanced_parameters.inpaint_mask_upload_checkbox:
                     if isinstance(inpaint_mask_image_upload, np.ndarray):
                         if inpaint_mask_image_upload.ndim == 3:
@@ -874,10 +874,11 @@ def worker(app):
                 handler(task)
                 build_image_wall(task)
                 pipeline.prepare_text_encoder(async_call=True)
-            except:
-                traceback.print_exc()
-            finally:
                 task.yields.append(['finish', task.results])
+            except Exception as e:
+                traceback.print_exc()
+                task.yields.append(['failed', e.__str__()])
+            finally:
                 finished_tasks.append(task)
                 script_callbacks.after_task_callback(task.task_id)
                 running_task = None

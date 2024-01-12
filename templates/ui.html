@@ -1437,6 +1437,10 @@
                   this.historyResults.pop();
                 }
               }
+              if (status.status === "failed") {
+                this.stopLoading = false;
+                this.generating = false;
+              }
               if (status.status === "MonitorException.402") {
                 this.popup.message = "You have ran out of your credits, please purchase more or upgrade to a higher plan.";
                 this.popup.isOpen = true;

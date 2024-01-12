@@ -105,6 +105,10 @@ async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''
             if flag == 'stopped':
                 yield Progress(
                     flag='stopped', task_id=task_id, status=Status(percentage=100, title=product, images=[]))
+            if flag == 'failed':
+                yield Progress(
+                    flag='failed', task_id=task_id, status=Status(percentage=percentage, title='Failed: ' + product, images=[]))
+                finished = True
 
     execution_time = time.perf_counter() - execution_start_time
     print(f'Total time: {execution_time:.2f} seconds')
