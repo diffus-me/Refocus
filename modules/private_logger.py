@@ -43,7 +43,9 @@ def log(img, dic, async_task: "AsyncTask"):
     else:
         is_nsfw = False
         pil_image.save(local_temp_filename)
-        script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img, filename=local_temp_filename))
+        script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img,
+                                                                               filename=local_temp_filename,
+                                                                               task_metadata=async_task.metadata))
 
 
     css_styles = (
