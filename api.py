@@ -57,7 +57,6 @@ from modules.database import (
     unshare_an_image,
     update_focus_task_record,
 )
-from modules.model_loader import load_file_from_url
 
 
 class Settings(BaseSettings):
@@ -830,22 +829,6 @@ async def list_presets(path: str) -> list[str]:
     return []
 
 
-async def download_models(models: dict[str, str], model_dir: str):
-    for file_name, url in models.items():
-        if file_name and url:
-            await asyncio.to_thread(load_file_from_url, url=url, model_dir=model_dir, file_name=file_name)
-
-
-async def download_all_necessary_models(config_dict: dict):
-    await download_models(
-        config_dict.get("checkpoint_downloads", modules.config.checkpoint_downloads), modules.config.path_checkpoints
-    )
-    await download_models(
-        config_dict.get("embeddings_downloads", modules.config.embeddings_downloads), modules.config.path_embeddings
-    )
-    await download_models(config_dict.get("lora_downloads", modules.config.lora_downloads), modules.config.path_loras)
-
-
 def create_api(
     app: FastAPI,
     generate_clicked: Callable,
@@ -1116,7 +1099,6 @@ def create_api(
         performance_selections = copy.deepcopy(flags.performance_selections)
         if performance not in performance_selections:
             performance_selections.append(performance)
-        await download_all_necessary_models(config_dict)
         return DefaultOptions(
             hostname=get_hostname(request, settings.hostname),
             performances=OptionList(

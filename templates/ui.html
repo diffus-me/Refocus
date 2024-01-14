@@ -651,6 +651,7 @@
                         v-model="refiner"
                         label="Refiner (SDXL)"
                         :items="refiners"
+                        :disabled="isLCMMode"
                       ></v-select>
                     </v-col>
                     <v-col
@@ -732,6 +733,7 @@
                     :min="1"
                     :max="30"
                     :step="0.01"
+                    :disabled="isLCMMode"
                     label="Guidance Scale"
                   >
                     <template v-slot:append>
@@ -750,6 +752,7 @@
                     :min="0"
                     :max="30"
                     :step="0.01"
+                    :disabled="isLCMMode"
                     label="Image Sharpness"
                   >
                     <template v-slot:append>
@@ -1139,6 +1142,7 @@
               show: false,
               src: "",
             },
+            nonLCMArguments: {},
             estimateConsume: {
                 args: {},
                 timeoutId: null,
@@ -1736,8 +1740,6 @@
             .then((options) => {
               this.defaultOptions = options;
               this.hostname = options.hostname;
-              this.performanceOptions = options.performances.options;
-              this.performance = options.performances.default;
               this.aspectRatios = options.aspect_ratios.options;
               this.aspectRatio = options.aspect_ratios.default;
               this.styles = options.styles.options.map(style => {
@@ -1797,6 +1799,11 @@
                 this.prompt = options.prompt;
               }
               this.negativePrompt = options.negative_prompt;
+
+              this.performanceOptions = options.performances.options;
+              this.performance = options.performances.default;
+              this.updateLCMOptions();
+
               this.selectingPreset = false;
               this.loadingPreset = false;
               if (typeof callback === "function") {
@@ -2052,6 +2059,41 @@
           openSubscriptionPage() {
             window.open("/user#/subscription?type=subscription", "_blank");
             this.popup.isOpen = false;
+          },
+          updateLCMOptions() {
+            if (this.isLCMMode) {
+              this.nonLCMArguments = {
+                refiner: this.refiner,
+                selectedSampler: this.selectedSampler,
+                selectedScheduler: this.selectedScheduler,
+                imageSharpness: this.imageSharpness,
+                guidanceScale: this.guidanceScale,
+              }
+              this.refiner = "None";
+              this.selectedSampler = "lcm";
+              this.selectedScheduler = "lcm";
+              this.imageSharpness = 0;
+              this.guidanceScale = 1;
+            } else if (Object.keys(this.nonLCMArguments).length != 0){
+              this.refiner = this.nonLCMArguments.refiner;
+              this.selectedSampler = this.nonLCMArguments.selectedSampler;
+              this.selectedScheduler = this.nonLCMArguments.selectedScheduler;
+              this.imageSharpness = this.nonLCMArguments.imageSharpness;
+              this.guidanceScale = this.nonLCMArguments.guidanceScale;
+              this.nonLCMArguments = {};
+            }
+          }
+        },
+        computed: {
+          isLCMMode() {
+            return this.performance === "Extreme Speed";
+          }
+        },
+        watch: {
+          performance(new_value, old_value) {
+            if (new_value === "Extreme Speed" || old_value === "Extreme Speed") {
+              this.updateLCMOptions();
+            }
           }
         },
         created() {
