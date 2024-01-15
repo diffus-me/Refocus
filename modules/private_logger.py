@@ -29,24 +29,27 @@ def log(img, dic, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
         return False, img, None
 
-    folder = async_task.base_dir or modules.config.path_outputs
-    date_string, local_temp_filename, only_name = generate_temp_filename(folder=folder, extension='png')
-    os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
-    html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
-
     pil_image = Image.fromarray(img)
     blured_image = nsfw_blur(pil_image, async_task)
 
     if blured_image:
         is_nsfw = True
-        img = np.array(blured_image)
-    else:
-        is_nsfw = False
-        pil_image.save(local_temp_filename)
-        script_callbacks.image_saved_callback(script_callbacks.ImageSaveParams(image=img,
-                                                                               filename=local_temp_filename,
-                                                                               task_metadata=async_task.metadata))
+        return True, np.array(blured_image), None
 
+    folder = async_task.base_dir or modules.config.path_outputs
+    date_string, local_temp_filename, only_name = generate_temp_filename(
+        folder=folder, extension='png'
+    )
+    os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
+    # html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
+    pil_image.save(local_temp_filename)
+    script_callbacks.image_saved_callback(
+        script_callbacks.ImageSaveParams(
+            image=img, filename=local_temp_filename, task_metadata=async_task.metadata
+        )
+    )
+
+    return False, img, local_temp_filename
 
     css_styles = (
         "<style>"
