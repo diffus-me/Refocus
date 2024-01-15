@@ -20,7 +20,7 @@ finished_tasks: list[AsyncTask] = []
 stop_or_skipped_tasks: list[AsyncTask] = []
 
 
-def worker(app):
+def worker():
     global async_tasks
     global running_task
     global finished_tasks
@@ -863,7 +863,6 @@ def worker(app):
 
         return
 
-    script_callbacks.app_started_callback(None, app)
     while True:
         time.sleep(0.01)
         if len(async_tasks) > 0:
@@ -884,9 +883,9 @@ def worker(app):
                 running_task = None
 
 
-def start(app):
-    threading.Thread(target=worker, args=(app, ), daemon=True).start()
+def start():
+    threading.Thread(target=worker, daemon=True).start()
 
 
 if __name__ == '__main__':
-    start(None)
+    start()
