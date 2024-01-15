@@ -9,6 +9,7 @@ from . import model_management
 import contextlib
 import ldm_patched.modules.clip_model
 import json
+from modules.model_info import get_all_model_info
 
 def gen_empty_tokens(special_tokens, length):
     start_token = special_tokens.get("start", None)
@@ -283,41 +284,47 @@ def expand_directory_list(directories):
     return list(dirs)
 
 def load_embed(embedding_name, embedding_directory, embedding_size, embed_key=None):
-    if isinstance(embedding_directory, str):
-        embedding_directory = [embedding_directory]
+    embedding_models = get_all_model_info().embedding_models
+    model_info = embedding_models[embedding_name]
 
-    embedding_directory = expand_directory_list(embedding_directory)
+    is_safetensors = model_info.is_safetensors
+    embed_path = model_info.filename
 
-    valid_file = None
-    for embed_dir in embedding_directory:
-        embed_path = os.path.abspath(os.path.join(embed_dir, embedding_name))
-        embed_dir = os.path.abspath(embed_dir)
-        try:
-            if os.path.commonpath((embed_dir, embed_path)) != embed_dir:
-                continue
-        except:
-            continue
-        if not os.path.isfile(embed_path):
-            extensions = ['.safetensors', '.pt', '.bin']
-            for x in extensions:
-                t = embed_path + x
-                if os.path.isfile(t):
-                    valid_file = t
-                    break
-        else:
-            valid_file = embed_path
-        if valid_file is not None:
-            break
+    # if isinstance(embedding_directory, str):
+    #     embedding_directory = [embedding_directory]
 
-    if valid_file is None:
-        return None
+    # embedding_directory = expand_directory_list(embedding_directory)
 
-    embed_path = valid_file
+    # valid_file = None
+    # for embed_dir in embedding_directory:
+    #     embed_path = os.path.abspath(os.path.join(embed_dir, embedding_name))
+    #     embed_dir = os.path.abspath(embed_dir)
+    #     try:
+    #         if os.path.commonpath((embed_dir, embed_path)) != embed_dir:
+    #             continue
+    #     except:
+    #         continue
+    #     if not os.path.isfile(embed_path):
+    #         extensions = ['.safetensors', '.pt', '.bin']
+    #         for x in extensions:
+    #             t = embed_path + x
+    #             if os.path.isfile(t):
+    #                 valid_file = t
+    #                 break
+    #     else:
+    #         valid_file = embed_path
+    #     if valid_file is not None:
+    #         break
+
+    # if valid_file is None:
+    #     return None
+
+    # embed_path = valid_file
 
     embed_out = None
 
     try:
-        if embed_path.lower().endswith(".safetensors"):
+        if is_safetensors:
             import safetensors.torch
             embed = safetensors.torch.load_file(embed_path, device="cpu")
         else:
