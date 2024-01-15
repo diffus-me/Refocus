@@ -11,6 +11,7 @@ import os
 import socket
 import uuid
 from datetime import datetime, timezone
+from functools import cache
 from typing import Annotated, Callable, Any
 from urllib.parse import urlparse
 
@@ -819,6 +820,12 @@ async def list_presets(path: str) -> list[str]:
     return []
 
 
+@cache
+def get_preset(preset: str) -> dict[str, Any]:
+    config_dict = copy.deepcopy(modules.config.config_dict)
+    return read_preset_and_update_config(preset, config_dict, settings.preset_dir)
+
+
 def create_api(
     app: FastAPI,
     generate_clicked: Callable,
@@ -1075,8 +1082,7 @@ def create_api(
     ):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
-        config_dict = copy.deepcopy(modules.config.config_dict)
-        config_dict = await asyncio.to_thread(read_preset_and_update_config, preset, config_dict)
+        config_dict = await asyncio.to_thread(get_preset, preset)
         lora_options = [
             LoraOptions(
                 lora_name=OptionList(default=lora_name, options=["None"] + modules.config.lora_filenames),
