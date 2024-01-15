@@ -26,8 +26,8 @@ ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])
 
 callback_map = dict(
     callbacks_app_started=[],
+    callbacks_app_stopped=[],
     callbacks_before_ui=[],
-    callbacks_main_loop=[],
     callbacks_before_task=[],
     callbacks_after_task=[],
     callbacks_image_saved=[],
@@ -62,6 +62,10 @@ def app_started_callback(demo: Optional[Blocks], app: FastAPI):
     invoke_callbacks('callbacks_app_started', demo, app)
 
 
+def app_stopped_callback():
+    invoke_callbacks('callbacks_app_stopped')
+
+
 def before_ui_callback():
     invoke_callbacks('callbacks_before_ui')
 
@@ -74,10 +78,6 @@ def after_task_callback(task_id: str):
     invoke_callbacks('callbacks_after_task', task_id)
 
 
-def main_loop_callback():
-    invoke_callbacks('callbacks_main_loop')
-
-
 def image_saved_callback(params: ImageSaveParams):
     invoke_callbacks('callbacks_image_saved', params)
 
@@ -86,6 +86,10 @@ def on_app_started(callback):
     """register a function to be called when the webui started, the gradio `Block` component and
     fastapi `FastAPI` object are passed as the arguments"""
     add_callback(callback_map['callbacks_app_started'], callback)
+
+
+def on_app_stopped(callback):
+    add_callback(callback_map['callbacks_app_stopped'], callback)
 
 
 def on_before_ui(callback):
@@ -100,10 +104,6 @@ def on_before_task(callback):
 
 def on_after_task(callback):
     add_callback(callback_map['callbacks_after_task'], callback)
-
-
-def on_main_loop(callback):
-    add_callback(callback_map['callbacks_main_loop'], callback)
 
 
 def on_image_saved(callback):

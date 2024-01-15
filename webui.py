@@ -22,6 +22,8 @@ import uuid
 import asyncio
 from typing import Any
 
+from fastapi import FastAPI
+
 from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
@@ -909,25 +911,39 @@ def launch_app(server_port):
 
 async def block_thread():
     logger.info("Starting the async loop and waiting on server")
+    called_worker_start = False
     try:
         while True:
-            script_callbacks.main_loop_callback()
+            if not called_worker_start and args_manager.args.lazy and len(worker.async_tasks) > 0:
+                worker.start()
+                called_worker_start = True
             await asyncio.sleep(1)
     except (KeyboardInterrupt, OSError):
         logger.info("Keyboard interruption in main thread... closing server.")
         if shared.gradio_root:
             shared.gradio_root.close()
+    finally:
+        script_callbacks.app_stopped_callback()
 
 
 def start(server_port: int = 0):
     if server_port == 0:
         server_port = args_manager.args.port
+
+    # make ui
     script_callbacks.before_ui_callback()
     with shared.gradio_root:
         refresh_seed, trigger_describe = make_ui()
+
+    # start app, and setup api
     app = launch_app(server_port)
-    app = create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
-    worker.start(app)
+    create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
+    script_callbacks.app_started_callback(shared.gradio_root, app)
+
+    # start async worker thread if necessary
+    if not args_manager.args.lazy:
+        worker.start()
+
     asyncio.run(block_thread())
 
 
