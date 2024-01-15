@@ -25,6 +25,8 @@ args_parser.parser.set_defaults(
     in_browser=True,
     port=None
 )
+args_parser.parser.add_argument("--lazy", action='store_true', default=False,
+                                help="Only start worker thread when there are tasks in the queue.")
 
 args_parser.args = args_parser.parser.parse_args()
 
