@@ -26,6 +26,7 @@ from ldm_patched.modules.sample import prepare_mask
 from modules.lora import match_lora
 from ldm_patched.modules.lora import model_lora_keys_unet, model_lora_keys_clip
 from modules.config import path_embeddings
+from modules.model_info import get_all_model_info
 from ldm_patched.contrib.external_model_advanced import ModelSamplingDiscrete
 
 
@@ -78,20 +79,15 @@ class StableDiffusionModel:
 
         loras_to_load = []
 
+        lora_models = get_all_model_info().lora_models
+
         for name, weight in loras:
             if name == 'None':
                 continue
 
-            if os.path.exists(name):
-                lora_filename = name
-            else:
-                lora_filename = os.path.join(modules.config.path_loras, name)
+            model_info = lora_models[name]
 
-            if not os.path.exists(lora_filename):
-                print(f'Lora file not found: {lora_filename}')
-                continue
-
-            loras_to_load.append((lora_filename, weight))
+            loras_to_load.append((model_info, weight))
 
         self.unet_with_lora = self.unet.clone() if self.unet is not None else None
         self.clip_with_lora = self.clip.clone() if self.clip is not None else None

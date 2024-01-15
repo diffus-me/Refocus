@@ -11,6 +11,7 @@ from extras.expansion import FooocusExpansion
 
 from ldm_patched.modules.model_base import SDXL, SDXLRefiner
 from modules.sample_hijack import clip_separate
+from modules.model_info import get_all_model_info
 
 
 model_base = core.StableDiffusionModel()
@@ -60,7 +61,8 @@ def assert_model_integrity():
 def refresh_base_model(name):
     global model_base
 
-    filename = os.path.abspath(os.path.realpath(os.path.join(modules.config.path_checkpoints, name)))
+    all_model_info = get_all_model_info()
+    filename = all_model_info.checkpoint_models[name]
 
     if model_base.filename == filename:
         return
@@ -76,17 +78,18 @@ def refresh_base_model(name):
 def refresh_refiner_model(name):
     global model_refiner
 
-    filename = os.path.abspath(os.path.realpath(os.path.join(modules.config.path_checkpoints, name)))
+    if name == 'None':
+        model_refiner = core.StableDiffusionModel()
+        print(f'Refiner unloaded.')
+        return
+
+    all_model_info = get_all_model_info()
+    filename = all_model_info.checkpoint_models[name]
 
     if model_refiner.filename == filename:
         return
 
     model_refiner = core.StableDiffusionModel()
-
-    if name == 'None':
-        print(f'Refiner unloaded.')
-        return
-
     model_refiner = core.load_model(filename)
     print(f'Refiner model loaded: {model_refiner.filename}')
 

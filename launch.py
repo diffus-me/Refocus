@@ -23,6 +23,7 @@ from modules.launch_util import is_installed, run, python, run_pip, requirements
 from modules.model_loader import load_file_from_url
 from modules.config import path_checkpoints, path_loras, path_vae_approx, path_fooocus_expansion, \
     checkpoint_downloads, path_embeddings, embeddings_downloads, lora_downloads
+from modules import model_info
 
 
 REINSTALL_ALL = False
@@ -71,12 +72,12 @@ vae_approx_filenames = [
 
 
 def download_models():
-    for file_name, url in checkpoint_downloads.items():
-        load_file_from_url(url=url, model_dir=path_checkpoints, file_name=file_name)
-    for file_name, url in embeddings_downloads.items():
-        load_file_from_url(url=url, model_dir=path_embeddings, file_name=file_name)
-    for file_name, url in lora_downloads.items():
-        load_file_from_url(url=url, model_dir=path_loras, file_name=file_name)
+    # for file_name, url in checkpoint_downloads.items():
+    #     load_file_from_url(url=url, model_dir=path_checkpoints, file_name=file_name)
+    # for file_name, url in embeddings_downloads.items():
+    #     load_file_from_url(url=url, model_dir=path_embeddings, file_name=file_name)
+    # for file_name, url in lora_downloads.items():
+    #     load_file_from_url(url=url, model_dir=path_loras, file_name=file_name)
     for file_name, url in vae_approx_filenames:
         load_file_from_url(url=url, model_dir=path_vae_approx, file_name=file_name)
 
@@ -105,6 +106,9 @@ def launch(server_port: int = 0):
         print("Set device to:", args.gpu_device_id)
 
     download_models()
+
+    model_info.download_models()
+    model_info.update_model_list()
 
     webui.start(server_port)
 

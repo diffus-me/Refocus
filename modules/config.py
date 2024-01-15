@@ -8,6 +8,7 @@ import modules.sdxl_styles
 
 from modules.model_loader import load_file_from_url
 from modules.util import get_files_from_folder
+from modules.model_info import overwrite_config
 
 
 config_path = os.path.abspath("./config.txt")
@@ -15,6 +16,8 @@ config_example_path = os.path.abspath("config_modification_tutorial.txt")
 config_dict = {}
 always_save_keys = []
 visited_keys = []
+
+overwrite_config(config_path)
 
 try:
     if os.path.exists(config_path):
@@ -403,6 +406,8 @@ def get_model_filenames(folder_path, name_filter=None):
 
 
 def update_all_model_names():
+    return
+
     global model_filenames, lora_filenames
     model_filenames = get_model_filenames(path_checkpoints)
     lora_filenames = get_model_filenames(path_loras)
@@ -448,11 +453,11 @@ def downloading_inpaint_models(v):
 
 
 def downloading_sdxl_lcm_lora():
-    load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors',
-        model_dir=path_loras,
-        file_name='sdxl_lcm_lora.safetensors'
-    )
+    # load_file_from_url(
+    #     url='https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors',
+    #     model_dir=path_loras,
+    #     file_name='sdxl_lcm_lora.safetensors'
+    # )
     return 'sdxl_lcm_lora.safetensors'
 
 
