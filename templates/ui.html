@@ -100,6 +100,14 @@
       </v-dialog>
       <v-container>
         <v-row class="d-flex flex-row align-end pa-3">
+          <v-alert
+            type="info"
+            text="Fooocus is now in beta version, and all credits are discounted at 25% off!"
+            variant="tonal"
+            closable
+          ></v-alert>
+        </v-row>
+        <v-row class="d-flex flex-row align-end pa-3">
           <div class="d-flex text-h1 font-weight-bold">imagine</div>
           <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
         </v-row>
@@ -409,7 +417,8 @@
                           >
                             <span style="white-space: normal;">
                               Describe into Prompt (BLIP)<br/>
-                              <span class="text-caption">[[getConsumeText(this.estimateBlipConsume)]]</span>
+                              <span class="text-caption" v-html="getConsumeText(this.estimateBlipConsume)">
+                              </span>
                             </span>
                           </v-btn>
                         </div>
@@ -479,8 +488,7 @@
             >
               <span style="white-space: normal;">
                 Generate<br/>
-                <span class="text-caption">
-                  [[getConsumeText(this.estimateConsume.result, this.estimateConsume.imageNumber)]]
+                <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
                 </span>
               </span>
             </v-btn>
@@ -1120,10 +1128,14 @@
             estimateConsume: {
                 args: {},
                 timeoutId: null,
-                result: "-",
+                inference: "-",
+                discount: 0,
                 imageNumber: 2,
             },
-            estimateBlipConsume: 2,
+            estimateBlipConsume: {
+                inference: "-",
+                discount: 0,
+            },
             popup: {
               isOpen: false,
               message: "",
@@ -1783,8 +1795,16 @@
             });
           },
           getConsumeText(consume, image_number = null) {
-            const credit_unit = `credit${consume === 1 ? "" :"s"}`;
-            let result = `Estimated ${consume} ${credit_unit}`
+            const inference = consume.inference;
+            const discount = consume.discount;
+
+            const real_inference = discount === 0 ? inference
+                                                  : Math.ceil(inference * (1 - discount));
+            const credit_unit = `credit${real_inference === 1 ? "" :"s"}`;
+
+            let result = discount === 0 ? `Estimated ${real_inference} ${credit_unit}`
+                                        : `Estimated <del>${inference}</del> ${real_inference} ${credit_unit}`
+
             if (image_number) {
                 const image_unit = `image${image_number === 1 ? "" :"s"}`;
                 result = `${result} for ${image_number} ${image_unit}`;
@@ -1836,10 +1856,13 @@
               }
             )
             if (response.status != 200) {
-              return "-";
+              return {inference: "-", discount: 0};
             }
-            const content = await response.json();
-            return content.inference;
+            const result = await response.json();
+            return {
+              inference: result.inference,
+              discount: result.discount ? result.discount : 0,
+            };
           },
           async getImageOptionsConsumeArgs() {
             if (!this.showImageOptions) {
@@ -1989,7 +2012,9 @@
               async () => {
                 let request_args = this.estimateConsume.args;
                 this.estimateConsume.imageNumber = Object.values(request_args)[0].params.image_number;
-                this.estimateConsume.result = await this.requestCreditsConsumption(request_args);
+                const result = await this.requestCreditsConsumption(request_args);
+                this.estimateConsume.inference = result.inference;
+                this.estimateConsume.discount = result.discount;
                 this.estimateConsume.timeoutId = null;
               },
               1000
@@ -1997,15 +2022,15 @@
           },
           async updateBlipEstimateConsume(_) {
             if (!this.showImageOptions) {
-              this.estimateBlipConsume = "-";
+              this.estimateBlipConsume = {inference: "-", discount: 0};
               return;
             }
             if (this.imageOptionTab != "describe") {
-              this.estimateBlipConsume = "-";
+              this.estimateBlipConsume = {inference: "-", discount: 0};
               return;
             }
             if (!this.describeImageUploader) {
-              this.estimateBlipConsume = "-";
+              this.estimateBlipConsume = {inference: "-", discount: 0};
               return;
             }
             let [width, height] = await this.getImageResolution(this.describeImageUploader);
@@ -2017,7 +2042,9 @@
                 }
               }
             }
-            this.estimateBlipConsume = await this.requestCreditsConsumption(args);
+            const result = await this.requestCreditsConsumption(request_args);
+            this.estimateBlipConsume.inference = result.inference;
+            this.estimateBlipConsume.discount = result.discount;
           },
           openSubscriptionPage() {
             window.open("/user#/subscription?type=subscription", "_blank");
