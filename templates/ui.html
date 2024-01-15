@@ -1021,7 +1021,7 @@
             hostname: "",
             settingTab: "settings",
             prompt: '',
-            performance: 'low',
+            _performance: 'Speed',
             performanceOptions: [],
             aspectRatio: '1:1',
             aspectRatios: [],
@@ -1766,7 +1766,6 @@
 
               this.performanceOptions = options.performances.options;
               this.performance = options.performances.default;
-              this.updateLCMOptions();
 
               this.selectingPreset = false;
               this.loadingPreset = false;
@@ -2051,11 +2050,13 @@
         computed: {
           isLCMMode() {
             return this.performance === "Extreme Speed";
-          }
-        },
-        watch: {
-          performance(new_value, old_value) {
-            if (new_value === "Extreme Speed" || old_value === "Extreme Speed") {
+          },
+          performance: {
+            get() {
+              return this._performance;
+            },
+            set(value) {
+              this._performance = value;
               this.updateLCMOptions();
             }
           }
