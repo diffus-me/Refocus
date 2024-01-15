@@ -7,9 +7,15 @@ import numpy as np
 from PIL import Image
 
 def load_torch_file(ckpt, safe_load=False, device=None):
+    if isinstance(ckpt, str):
+        is_safetensors = ckpt.lower().endswith(".safetensors")
+    else:
+        is_safetensors = ckpt.filename
+        ckpt = ckpt.filename
+
     if device is None:
         device = torch.device("cpu")
-    if ckpt.lower().endswith(".safetensors"):
+    if is_safetensors:
         sd = safetensors.torch.load_file(ckpt, device=device.type)
     else:
         if safe_load:

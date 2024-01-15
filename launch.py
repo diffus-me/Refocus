@@ -22,6 +22,7 @@ from build_launcher import build_launcher
 from modules.launch_util import is_installed, run, python, run_pip, requirements_met
 from modules.model_loader import load_file_from_url
 from modules import config
+from modules import model_info
 
 
 REINSTALL_ALL = False
@@ -88,24 +89,24 @@ def download_models(args):
         print('Skipped model download.')
         return
 
-    if not args.always_download_new_model:
-        if not os.path.exists(os.path.join(config.path_checkpoints, config.default_base_model_name)):
-            for alternative_model_name in config.previous_default_models:
-                if os.path.exists(os.path.join(config.path_checkpoints, alternative_model_name)):
-                    print(f'You do not have [{config.default_base_model_name}] but you have [{alternative_model_name}].')
-                    print(f'Fooocus will use [{alternative_model_name}] to avoid downloading new models, '
-                          f'but you are not using latest models.')
-                    print('Use --always-download-new-model to avoid fallback and always get new models.')
-                    config.checkpoint_downloads = {}
-                    config.default_base_model_name = alternative_model_name
-                    break
+    #if not args.always_download_new_model:
+    #    if not os.path.exists(os.path.join(config.path_checkpoints, config.default_base_model_name)):
+    #        for alternative_model_name in config.previous_default_models:
+    #            if os.path.exists(os.path.join(config.path_checkpoints, alternative_model_name)):
+    #                print(f'You do not have [{config.default_base_model_name}] but you have [{alternative_model_name}].')
+    #                print(f'Fooocus will use [{alternative_model_name}] to avoid downloading new models, '
+    #                      f'but you are not using latest models.')
+    #                print('Use --always-download-new-model to avoid fallback and always get new models.')
+    #                config.checkpoint_downloads = {}
+    #                config.default_base_model_name = alternative_model_name
+    #                break
 
-    for file_name, url in config.checkpoint_downloads.items():
-        load_file_from_url(url=url, model_dir=config.path_checkpoints, file_name=file_name)
-    for file_name, url in config.embeddings_downloads.items():
-        load_file_from_url(url=url, model_dir=config.path_embeddings, file_name=file_name)
-    for file_name, url in config.lora_downloads.items():
-        load_file_from_url(url=url, model_dir=config.path_loras, file_name=file_name)
+    #for file_name, url in config.checkpoint_downloads.items():
+    #    load_file_from_url(url=url, model_dir=config.path_checkpoints, file_name=file_name)
+    #for file_name, url in config.embeddings_downloads.items():
+    #    load_file_from_url(url=url, model_dir=config.path_embeddings, file_name=file_name)
+    #for file_name, url in config.lora_downloads.items():
+    #    load_file_from_url(url=url, model_dir=config.path_loras, file_name=file_name)
 
     return
 
@@ -120,7 +121,8 @@ def launch(server_port: int = 0):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
         print("Set device to:", args.gpu_device_id)
 
-    download_models(args)
+    model_info.download_models()
+    model_info.update_model_list()
 
     webui.start(server_port)
 
