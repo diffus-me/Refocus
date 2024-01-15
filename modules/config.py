@@ -89,8 +89,11 @@ try_load_deprecated_user_path_config()
 
 preset = args_manager.args.preset
 
-def read_preset_and_update_config(preset: str, config_dict: dict) -> dict:
-    preset_path = os.path.abspath(f'./presets/{preset}.json')
+def read_preset_and_update_config(preset: str | None, config_dict: dict, preset_dir: str = "./presets") -> dict:
+    if preset is None:
+        return config_dict
+
+    preset_path = os.path.abspath(os.path.join(preset_dir, f'{preset}.json'))
     try:
         if os.path.exists(preset_path):
             with open(preset_path, "r", encoding="utf-8") as json_file:
