@@ -859,7 +859,7 @@ def create_api(
                     if image:
                         image_source = await verify_image(http_session, image, user_id, subdir="fooocus/inputs")
                         config.ip_ctrls[i].ip_image = image_source
-                        if image_source.image_np:
+                        if image_source.image_np is not None:
                             ip_ctrls += [
                                 image_source.image_np,
                                 config.ip_ctrls[i].ip_stop,
