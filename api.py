@@ -1313,8 +1313,8 @@ def _get_image_options_consume_args(config: GenerationOption) -> tuple[str, dict
             width += height * scale
 
         return "fooocus.inpaint", {
-            "width": width,
-            "height": height,
+            "width": int(width),
+            "height": int(height),
             "steps_coefficient": config.get_steps_coefficient(),
             "image_number": config.image_number,
         }
