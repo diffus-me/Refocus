@@ -1992,8 +1992,8 @@
               return {
                 "fooocus.inpaint": {
                   params: {
-                    width: width,
-                    height: height,
+                    width: Math.floor(width),
+                    height: Math.floor(height),
                     steps_coefficient: this.getStepsCoefficient(),
                     image_number: this.imageNumber,
                   }
