@@ -85,7 +85,7 @@ class StableDiffusionModel:
             if name == 'None':
                 continue
 
-            model_info = lora_models[name]
+            model_info = lora_models[name] if not os.path.isabs(name) else name
 
             loras_to_load.append((model_info, weight))
 
