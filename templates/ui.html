@@ -289,6 +289,7 @@
                         <v-card variant="flat">
                           <v-card-text>
                             <v-file-input
+                              v-model="inpaintImageFiles"
                               :rules="imageRules"
                               accept="image/*"
                               placeholder="Choose an image file"
@@ -1110,6 +1111,7 @@
             contentTypes: [],
             describeImageUploader: null,
             inpaintImageUploader: null,
+            inpaintImageFiles: [],
             inpaintSelection: "Inpaint or Outpaint (default)",
             outpaintDirection: [],
             inpaintImprovementPrompt: "",
@@ -1206,7 +1208,6 @@
                       tool.style.display = "none";
                     }
                   });
-                  this.toolObserver.disconnect();
                 }
               };
               this.toolObserver = new MutationObserver(callback);
@@ -1247,6 +1248,7 @@
           },
           clearEdit() {
             this.inpaintImageUploader = null;
+            this.ImageEditor.render();
           },
           initializeFilerobot() {
             const container = document.getElementById("inpaint-image-editor");
@@ -2124,6 +2126,14 @@
               this.updateLCMOptions();
             }
           }
+        },
+        watch: {
+          imageOptionTab(newTab, oldTab) {
+            if (oldTab === "inpaint" && newTab !== "inpaint") {
+              this.clearEdit();
+              this.inpaintImageFiles = [];
+            }
+          },
         },
         created() {
           for (let name of [
