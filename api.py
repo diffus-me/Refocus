@@ -970,6 +970,7 @@ def create_api(
                 request_headers["x-session-hash"] = str(uuid.uuid4())
                 request_headers["x-task-id"] = generation_option.task_id
 
+                args = await prepare_args_for_generate(generation_option, user_id)
                 function_name, decoded_params = _get_consume_args(generation_option)
                 async with system_monitor.monitor_call_context(
                     request_headers=request_headers,
@@ -985,7 +986,6 @@ def create_api(
                         function_name=function_name,
                         decoded_params=decoded_params,
                     ) as step_logger:
-                        args = await prepare_args_for_generate(generation_option, user_id)
                         async for progress in generate_clicked(
                             *args,
                             base_dir=output_dir,
