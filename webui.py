@@ -22,8 +22,6 @@ import uuid
 import asyncio
 from typing import Any
 
-from fastapi import FastAPI
-
 from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
@@ -109,7 +107,7 @@ async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''
                     flag='stopped', task_id=task_id, status=Status(percentage=100, title=product, images=[]))
             if flag == 'failed':
                 yield Progress(
-                    flag='failed', task_id=task_id, status=Status(percentage=percentage, title='Failed: ' + product, images=[]))
+                    flag='failed', task_id=task_id, status=Status(percentage=100, title='Failed: ' + product, images=[]))
                 finished = True
 
     execution_time = time.perf_counter() - execution_start_time
@@ -138,9 +136,14 @@ async def recover_task(task_id: str):
             break
     if task:
         finished = True
+        flag, product = task.yields.pop()
+        if flag == "failed":
+            yield Progress(
+                flag='failed', task_id=task_id, status=Status(percentage=100, title='Failed: ' + product, images=[]))
+        else:
+            yield Progress(
+                flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=task.results, image_filepaths=task.result_paths))
         task.yields = []
-        yield Progress(
-            flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=task.results, image_filepaths=task.result_paths))
 
     if worker.running_task and worker.running_task.task_id == task_id:
         started = True
@@ -211,6 +214,10 @@ async def recover_task(task_id: str):
             if flag == 'stopped':
                 yield Progress(
                     flag='stopped', task_id=task_id, status=Status(percentage=100, title=product, images=[]))
+            if flag == 'failed':
+                yield Progress(
+                    flag='failed', task_id=task_id, status=Status(percentage=100, title='Failed: ' + product, images=[]))
+                finished = True
 
     execution_time = time.perf_counter() - execution_start_time
     print(f'Total time: {execution_time:.2f} seconds')
@@ -297,19 +304,19 @@ async def generate_clicked_gradio(*args):
                 gr.update(visible=False),
                 gr.update(visible=True, value=progress.status.images),
             )
+        elif progress.flag == "failed":
+            yield (
+                gr.update(value=progress.task_id),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(),
+            )
     return
 
 
 reload_javascript()
 
-title = f'Fooocus {fooocus_version.version}'
-
-if isinstance(args_manager.args.preset, str):
-    title += ' ' + args_manager.args.preset
-
-shared.gradio_root = gr.Blocks(
-    title=title,
-    css=modules.html.css).queue()
 
 def stop_clicked(task_id: str):
     if worker.running_task and worker.running_task.task_id == task_id:
@@ -365,8 +372,31 @@ def skip_clicked(task_id: str):
             return True
     return False
 
-def make_ui():
 
+def refresh_seed(r, seed_string):
+    if r:
+        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
+    else:
+        try:
+            seed_value = int(seed_string)
+            if constants.MIN_SEED <= seed_value <= constants.MAX_SEED:
+                return seed_value
+        except ValueError:
+            pass
+        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
+
+
+def trigger_describe(mode, img):
+    if mode == flags.desc_type_photo:
+        from extras.interrogate import default_interrogator as default_interrogator_photo
+        return default_interrogator_photo(img), ["Fooocus V2", "Fooocus Enhance", "Fooocus Sharp"]
+    if mode == flags.desc_type_anime:
+        from extras.wd14tagger import default_interrogator as default_interrogator_anime
+        return default_interrogator_anime(img), ["Fooocus V2", "Fooocus Masterpiece"]
+    return mode, ["Fooocus V2"]
+
+
+def make_gradio_ui(root_block: gr.Blocks):
     with gr.Row():
         with gr.Column(scale=2):
             task_id = gr.Textbox(label='Task ID', value='', visible=False, elem_id='task_id')
@@ -387,7 +417,7 @@ def make_ui():
 
                     default_prompt = modules.config.default_prompt
                     if isinstance(default_prompt, str) and default_prompt != '':
-                        shared.gradio_root.load(lambda: default_prompt, outputs=prompt)
+                        root_block.load(lambda: default_prompt, outputs=prompt)
 
                 with gr.Column(scale=3, min_width=0):
                     generate_button = gr.Button(label="Generate", value="Generate", elem_classes='type_row', elem_id='generate_button', visible=True)
@@ -516,18 +546,6 @@ def make_ui():
                 def random_checked(r):
                     return gr.update(visible=not r)
 
-                def refresh_seed(r, seed_string):
-                    if r:
-                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
-                    else:
-                        try:
-                            seed_value = int(seed_string)
-                            if constants.MIN_SEED <= seed_value <= constants.MAX_SEED:
-                                return seed_value
-                        except ValueError:
-                            pass
-                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
-
                 seed_random.change(random_checked, inputs=[seed_random], outputs=[image_seed],
                                    queue=False, show_progress=False)
 
@@ -550,8 +568,8 @@ def make_ui():
                                                     elem_classes=['style_selections'])
                 gradio_receiver_style_selections = gr.Textbox(elem_id='gradio_receiver_style_selections', visible=False)
 
-                shared.gradio_root.load(lambda: gr.update(choices=copy.deepcopy(style_sorter.all_styles)),
-                                        outputs=style_selections)
+                root_block.load(lambda: gr.update(choices=copy.deepcopy(style_sorter.all_styles)),
+                                outputs=style_selections)
 
                 style_search_bar.change(style_sorter.search_styles,
                                         inputs=[style_selections, style_search_bar],
@@ -869,19 +887,8 @@ def make_ui():
                 gr.Audio(interactive=False, value=notification_file, elem_id='audio_notification', visible=False)
                 break
 
-        def trigger_describe(mode, img):
-            if mode == flags.desc_type_photo:
-                from extras.interrogate import default_interrogator as default_interrogator_photo
-                return default_interrogator_photo(img), ["Fooocus V2", "Fooocus Enhance", "Fooocus Sharp"]
-            if mode == flags.desc_type_anime:
-                from extras.wd14tagger import default_interrogator as default_interrogator_anime
-                return default_interrogator_anime(img), ["Fooocus V2", "Fooocus Masterpiece"]
-            return mode, ["Fooocus V2"]
-
         desc_btn.click(trigger_describe, inputs=[desc_method, desc_input_image],
                        outputs=[prompt, style_selections], show_progress=True, queue=True)
-
-    return refresh_seed, trigger_describe
 
 
 def dump_default_english_config():
@@ -892,21 +899,30 @@ def dump_default_english_config():
 # dump_default_english_config()
 
 
-def launch_app(server_port):
-    app, _, _ = shared.gradio_root.launch(
-        inbrowser=False,
-        server_name=args_manager.args.listen,
-        server_port=server_port,
-        share=args_manager.args.share,
-        auth=check_auth if args_manager.args.share and auth_enabled else None,
-        blocked_paths=[constants.AUTH_FILENAME],
-        prevent_thread_lock=True,
-        app_kwargs={
-            "docs_url": "/docs",
-            "redoc_url": "/redoc",
-        },
-    )
-    return app
+def launch_app_with_gradio(server_port):
+    title = f'Fooocus {fooocus_version.version}'
+
+    if isinstance(args_manager.args.preset, str):
+        title += ' ' + args_manager.args.preset
+    shared.gradio_root = gr.Blocks(
+        title=title,
+        css=modules.html.css).queue()
+    with shared.gradio_root:
+        make_gradio_ui(shared.gradio_root)
+        app, _, _ = shared.gradio_root.launch(
+            inbrowser=False,
+            server_name=args_manager.args.listen,
+            server_port=server_port,
+            share=args_manager.args.share,
+            auth=check_auth if args_manager.args.share and auth_enabled else None,
+            blocked_paths=[constants.AUTH_FILENAME],
+            prevent_thread_lock=True,
+            app_kwargs={
+                "docs_url": "/docs",
+                "redoc_url": "/redoc",
+            },
+        )
+        return app
 
 
 async def block_thread():
@@ -930,13 +946,9 @@ def start(server_port: int = 0):
     if server_port == 0:
         server_port = args_manager.args.port
 
-    # make ui
     script_callbacks.before_ui_callback()
-    with shared.gradio_root:
-        refresh_seed, trigger_describe = make_ui()
+    app = launch_app_with_gradio(server_port)
 
-    # start app, and setup api
-    app = launch_app(server_port)
     create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
     script_callbacks.app_started_callback(shared.gradio_root, app)
 
