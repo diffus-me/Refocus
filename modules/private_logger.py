@@ -27,14 +27,14 @@ def get_current_html_path(base_dir: str | None = None):
 
 def log(img, dic, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
-        return False, img, None
+        return False, img, ""
 
     pil_image = Image.fromarray(img)
     blured_image = nsfw_blur(pil_image, async_task)
 
     if blured_image:
         is_nsfw = True
-        return True, np.array(blured_image), None
+        return True, np.array(blured_image), ""
 
     folder = async_task.base_dir or modules.config.path_outputs
     date_string, local_temp_filename, only_name = generate_temp_filename(
