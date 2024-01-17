@@ -707,7 +707,10 @@ async def process_result_images(
             if image is not None:
                 image_id = ""
                 if len(progress.status.image_filepaths) == len(progress.status.images):
-                    image_id = encode_filepath_with_base64(progress.status.image_filepaths[idx])
+                    filepath = progress.status.image_filepaths[idx]
+                    if filepath:
+                        image_id = encode_filepath_with_base64(filepath)
+
                 if is_url:
                     rel_filepath = os.path.join(
                         "fooocus/outputs/",
