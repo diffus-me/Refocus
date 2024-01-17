@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import ssl
@@ -111,6 +112,21 @@ def download_models(args):
     return
 
 
+def _config_logging(logging_level, logging_file_dir, component):
+    level = logging.getLevelName(logging_level)
+    logger_format = '%(asctime)s [%(levelname)s] (%(name)s:%(lineno)d): %(message)s'
+
+    if logging_file_dir:
+        import pathlib
+        log_filename = pathlib.Path(logging_file_dir).joinpath(f'{component}.log')
+        logging.basicConfig(level=level,
+                            filename=str(log_filename),
+                            format=logger_format)
+    else:
+        logging.basicConfig(level=level,
+                            format=logger_format)
+
+
 def launch(server_port: int = 0):
     import webui
     prepare_environment()
@@ -120,6 +136,10 @@ def launch(server_port: int = 0):
     if args.gpu_device_id is not None:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_device_id)
         print("Set device to:", args.gpu_device_id)
+
+    _config_logging(args.logging_level, args.logging_file_dir, 'focus')
+
+    download_models(args)
 
     model_info.download_models()
     model_info.update_model_list()
