@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from functools import cache
 from typing import Annotated, Callable, Any
 from urllib.parse import urlparse
+from modules import script_callbacks
 
 import aiofiles
 import aiofiles.os
@@ -972,7 +973,7 @@ def create_api(
                 request_headers = dict(websocket.headers)
                 request_headers["x-session-hash"] = str(uuid.uuid4())
                 request_headers["x-task-id"] = generation_option.task_id
-
+                task_id = generation_option.task_id
                 args = await prepare_args_for_generate(generation_option, user_id)
                 function_name, decoded_params = _get_consume_args(generation_option)
                 async with system_monitor.monitor_call_context(
@@ -1019,6 +1020,7 @@ def create_api(
             )
             raise
         finally:
+            script_callbacks.after_task_callback(task_id)
             await websocket.close()
 
     @app.post("/api/focus/stop", response_class=JSONResponse)
