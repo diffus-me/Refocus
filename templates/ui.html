@@ -840,6 +840,7 @@
           <v-card-item>
             <v-card-title>Task ID [[ result.taskId ]]</v-card-title>
             <v-card-subtitle>[[ result.params.prompt ]]</v-card-subtitle>
+            <v-alert v-if="result.errorMessage" type="error" :text="result.errorMessage"></v-alert>
           </v-card-item>
           <v-card-text class="pa-0">
             <v-slide-group
@@ -1145,6 +1146,18 @@
           };
         },
         methods: {
+          pushHistory(errorMessage = null) {
+            this.historyResults.unshift({
+              taskId: this.runningTaskId,
+              params: this.generatingParams,
+              paramsTable: this.turnObjParams(this.generatingParams),
+              images: this.runningTaskResultImages,
+              errorMessage: errorMessage,
+            });
+            if (this.historyResults.length > this.maxHistory) {
+              this.historyResults.pop();
+            }
+          },
           previewUserImage(image, imageSrcProperty, index=null) {
             const file = event.target.files[0];
             if (file) {
@@ -1451,19 +1464,12 @@
                   this.runningTaskResultImages = status.images.map(item => {
                     return {src: item.encoded_image, id: item.image_id}});
                 }
-                this.historyResults.unshift({
-                  taskId: this.runningTaskId,
-                  params: this.generatingParams,
-                  paramsTable: this.turnObjParams(this.generatingParams),
-                  images: this.runningTaskResultImages,
-                });
-                if (this.historyResults.length > this.maxHistory) {
-                  this.historyResults.pop();
-                }
+                this.pushHistory();
               }
               if (status.status === "failed") {
                 this.stopLoading = false;
                 this.generating = false;
+                this.pushHistory(status.message);
               }
               if (status.status === "MonitorException.402") {
                 this.popup.message = "You have ran out of your credits, please purchase more or upgrade to a higher plan.";
