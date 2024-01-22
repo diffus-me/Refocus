@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vuetify@3.4.8/dist/vuetify.min.js"></script>
+    <script type="text/javascript" src="/public/js/js.cookie.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/intro.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/minified/introjs.min.css">
     <style>
       .hero-image {
         width: 100%;
@@ -107,11 +110,22 @@
             closable
           ></v-alert>
         </v-row>
-        <v-row class="d-flex flex-row align-end pa-3">
-          <div class="d-flex text-h1 font-weight-bold">imagine</div>
-          <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
+        <v-row>
+          <v-col cols="11">
+            <v-row class="d-flex flex-row align-end pa-3">
+              <div class="d-flex text-h1 font-weight-bold">imagine</div>
+              <div class="d-flex text-subtitle-1 text-grey-lighten-1 ml-1">Powered by Fooocus & Diffus</div>
+            </v-row>
+          </v-col>
+          <v-col cols="1">
+            <v-btn
+              id="introjs-button"
+              icon="mdi-help-circle-outline"
+              variant="plain"
+              @click="startIntroJS(true)"
+            ></v-btn>
+          </v-col>
         </v-row>
-
         <v-row class="d-flex pa-3">
           <v-expansion-panels v-model="panelName" v-show="showImageOptions">
             <v-expansion-panel value="image_options">
@@ -451,6 +465,7 @@
           >
             <v-textarea
               v-model="prompt"
+              id="prompt-textarea"
               clearable
               variant="solo-filled"
               rows="1"
@@ -460,6 +475,7 @@
             >
               <template v-slot:append-inner>
                 <v-btn
+                  id="img2img-button"
                   :color="showImageOptions? 'light-green-lighten-5': 'grey-lighten-4'"
                   variant="text"
                   @click="toggleImageOptions"
@@ -481,6 +497,7 @@
           >
             <v-btn
               v-if="!generating"
+              id="generate-button"
               @click="startToGenerate(0)"
               width="100%"
               height="56px"
@@ -514,6 +531,7 @@
               collapse-icon="mdi-tune"
             >Options<v-chip
                 v-show="!selectingPreset && !loadingPreset"
+                id="preset-clip"
                 class="ma-2"
                 :color="presetColor[selectedPreset]"
                 @click.stop="selectingPreset = true"
@@ -1146,6 +1164,15 @@
           };
         },
         methods: {
+          startIntroJS(force = false) {
+            const cookie_key = "_fooocus_introjs_showed";
+            if (!force && window.Cookies.get(cookie_key)) {
+                return;
+            }
+            const introjs = getIntroJS();
+            introjs.onexit(() => window.Cookies.set(cookie_key, true, { expires: 360 }));
+            introjs.start();
+          },
           pushHistory(errorMessage = null) {
             this.historyResults.unshift({
               taskId: this.runningTaskId,
@@ -2131,9 +2158,45 @@
           }
         },
         mounted() {
-          this.updateDefaultOptions("default", this.initializeFilerobot);
+          this.updateDefaultOptions(
+              "default",
+              () => {this.initializeFilerobot(); this.startIntroJS()}
+          );
         },
       }).use(vuetify).mount('#app');
+    </script>
+    <script>
+      function getIntroJS() {
+        return introJs().setOptions({
+          tooltipClass: "text-black",
+          showProgress: true,
+          showBullets: false,
+          steps: [
+            {
+              title: "Refocus Quick Guide",
+              element: document.querySelector("#prompt-textarea"),
+              intro: "Just simply describe what you would like to see in plain English here.",
+            },
+            {
+              element: document.querySelector("#generate-button"),
+              intro: "Click here to generate images.",
+            },
+            {
+              element: document.querySelector("#preset-clip"),
+              intro: "Click here to choose a preset for paramters and styles.",
+            },
+            {
+              element: document.querySelector("#img2img-button"),
+              intro: "Click here to open the image to image interface.",
+            },
+            {
+              element: document.querySelector("#introjs-button"),
+              title: "Enjoy Refocus",
+              intro: "Click here to view this guide again. <p> Join our <a href='https://discord.gg/e4UVBNuHyB'>Discord</a> for futher support.</p><br><p>Enjoy!</p>",
+            }
+          ],
+        });
+      }
     </script>
   </body>
 </html>
