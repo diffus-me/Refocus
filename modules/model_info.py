@@ -71,6 +71,7 @@ class ModelInfo(BaseModel):
     name: str
     sha256: str
     url: str
+    base: Literal["SDXL", "SDV1"] | None
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.name})"
@@ -163,7 +164,10 @@ def update_model_list() -> None:
 
     all_model_info = get_all_model_info()
 
-    config.model_filenames = sorted(all_model_info.checkpoint_models.keys())
+    config.model_filenames = sorted(
+        model.name for model in all_model_info.checkpoint_models.values() if model.base == "SDXL"
+    )
+    config.refiner_model_filenames = sorted(all_model_info.checkpoint_models.keys())
     config.lora_filenames = sorted(all_model_info.lora_models.keys())
 
 

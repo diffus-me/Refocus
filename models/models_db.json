@@ -3,66 +3,77 @@
         "model_type": "checkpoint",
         "name": "juggernautXL_version6Rundiffusion.safetensors",
         "sha256": "1fe6c7ec54c786040cdabc7b4e89720069d97096922e20d01f13e7764412b47f",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_version6Rundiffusion.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_version6Rundiffusion.safetensors",
+        "base": "SDXL"
     },
     {
         "model_type": "lora",
         "name": "sd_xl_offset_example-lora_1.0.safetensors",
         "sha256": "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_offset_example-lora_1.0.safetensors"
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_offset_example-lora_1.0.safetensors",
+        "base": null
     },
     {
         "model_type": "checkpoint",
         "name": "bluePencilXL_v050.safetensors",
         "sha256": "8c462a80f4b5291b24feb624d67248bd09f71f9074d7014d8ad7901b120bdcc7",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/bluePencilXL_v050.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/bluePencilXL_v050.safetensors",
+        "base": "SDXL"
     },
     {
         "model_type": "checkpoint",
         "name": "DreamShaper_8_pruned.safetensors",
         "sha256": "879db523c30d3b9017143d56705015e15a2cb5628762c11d086fed9538abd7fd",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/DreamShaper_8_pruned.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/DreamShaper_8_pruned.safetensors",
+        "base": "SDV1"
     },
     {
         "model_type": "embedding",
         "name": "unaestheticXLv31.safetensors",
         "sha256": "75fa9a0423a19c56ccaaea3b985b4999408b530585eca3f6108685c0007e5b2e",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/unaestheticXLv31.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/unaestheticXLv31.safetensors",
+        "base": null
     },
     {
         "model_type": "checkpoint",
         "name": "realisticStockPhoto_v10.safetensors",
         "sha256": "2d44ce378ddcc922769df4effe74dae3370a887ea9897093e1f5fbdc50b67a02",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v10.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v10.safetensors",
+        "base": "SDXL"
     },
     {
         "model_type": "lora",
         "name": "SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
         "sha256": "bc6db9d8f167adf51c2ad9280cccaff108fc8a6d6e8cd654e3afcfdbf13e1048",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors"
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
+        "base": null
     },
     {
         "model_type": "checkpoint",
         "name": "sd_xl_base_1.0_0.9vae.safetensors",
         "sha256": "e6bb9ea85bbf7bf6478a7c6d18b71246f22e95d41bcdd80ed40aa212c33cfeff",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0_0.9vae.safetensors"
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0_0.9vae.safetensors",
+        "base": "SDXL"
     },
     {
         "model_type": "checkpoint",
         "name": "sd_xl_refiner_1.0_0.9vae.safetensors",
         "sha256": "8d0ce6c016004cbdacd50f937dad381d8c396628d621a7f97191470532780164",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-refiner-1.0/resolve/main/sd_xl_refiner_1.0_0.9vae.safetensors"
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-refiner-1.0/resolve/main/sd_xl_refiner_1.0_0.9vae.safetensors",
+        "base": "SDXL"
     },
     {
         "model_type": "checkpoint",
         "name": "turbovisionxlSuperFastXLBasedOnNew_tvxlV431Bakedvae.safetensors",
         "sha256": "b62ddba1a60d4ed5d7d1185398ff8dac70347ee749ac7811491f849bef48a77a",
-        "url": "https://civitai.com/api/download/models/273102?type=Model&format=SafeTensor&size=pruned&fp=fp16"
+        "url": "https://civitai.com/api/download/models/273102?type=Model&format=SafeTensor&size=pruned&fp=fp16",
+        "base": "SDXL"
     },
     {
         "model_type": "lora",
         "name": "sdxl_lcm_lora.safetensors",
         "sha256": "c3dbf7eb26dd00ae6b6b95da69be9f1cb95a3b2c5bcf9be82323227a19b91329",
-        "url": "https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors"
+        "url": "https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors",
+        "base": null
     }
 ]

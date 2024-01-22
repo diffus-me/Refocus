@@ -407,6 +407,7 @@ with open(config_example_path, "w", encoding="utf-8") as json_file:
 os.makedirs(path_outputs, exist_ok=True)
 
 model_filenames = []
+refiner_model_filenames = []
 lora_filenames = []
 
 
