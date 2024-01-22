@@ -290,7 +290,7 @@ class GenerationOption(BaseModel):
     )
     refiner_model: str = Field(
         default=modules.config.default_refiner_model_name,
-        description=f"Refiner (SDXL or SD 1.5). Options are: {modules.config.model_filenames}",
+        description=f"Refiner (SDXL or SD 1.5). Options are: {modules.config.refiner_model_filenames}",
     )
     refiner_switch: float = Field(
         default=modules.config.default_refiner_switch,
@@ -1140,7 +1140,7 @@ def create_api(
             ),
             refiner_models=OptionList(
                 default=config_dict.get("default_refiner", modules.config.default_refiner_model_name),
-                options=["None"] + config_dict.get("refiner_filenames", modules.config.model_filenames),
+                options=["None"] + config_dict.get("refiner_filenames", modules.config.refiner_model_filenames),
             ),
             refiner_switch=config_dict.get("default_refiner_switch", modules.config.default_refiner_switch),
             loras=lora_options,
