@@ -118,10 +118,11 @@ def _config_logging(logging_level, logging_file_dir, component):
 
     if logging_file_dir:
         import pathlib
-        log_filename = pathlib.Path(logging_file_dir).joinpath(f'{component}.log')
+        log_filename = pathlib.Path(logging_file_dir, f'{component}.log')
         logging.basicConfig(level=level,
                             filename=str(log_filename),
-                            format=logger_format)
+                            format=logger_format,
+                            force=True)
     else:
         logging.basicConfig(level=level,
                             format=logger_format)
