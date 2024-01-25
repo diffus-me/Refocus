@@ -1246,7 +1246,20 @@ def create_api(
         if not database_created:
             await create_tables()
             database_created = True
-        return templates.TemplateResponse("ui.html", {"request": request})
+
+        base64_encoded_user_id = base64.b64encode(
+            request.headers["user-id"].encode('utf-8')
+        ).decode('utf-8')
+        return templates.TemplateResponse(
+            "ui.html",
+            {
+                "request": request,
+                "base64_encoded_user_id": base64.b64encode(
+                    request.headers["user-id"].encode('utf-8')
+                ).decode('utf-8'),
+                "user_tier": request.headers["user-tier"],
+            }
+        )
 
     return app
 
