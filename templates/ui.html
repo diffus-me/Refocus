@@ -13,6 +13,20 @@
     <script type="text/javascript" src="/public/js/js.cookie.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/intro.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/minified/introjs.min.css">
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6SKEYMGQ07"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag("js", new Date());
+
+      gtag("config", "G-6SKEYMGQ07", {
+        user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
+      });
+      gtag("config", "G-649WH3932W", {
+        user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
+      });
+    </script>
     <style>
       .hero-image {
         width: 100%;
@@ -1432,6 +1446,11 @@
               socket = new WebSocket(`${wsProtocol}://${this.hostname}/api/focus/ws/generate?` + new URLSearchParams({
                 new_task_id: this.runningTaskId,
               }));
+              gtag("event", "spend_virtual_currency", {
+                value: this.estimateConsume.inference,
+                virtual_currency_name: "credits",
+                item_name: "refocus_generate_button",
+              });
             }
             this.generating = true;
             this.runningTaskMessage = "Preparing...";
