@@ -1201,10 +1201,21 @@
               isOpen: false,
               itemName: "",
               message: "",
+              URL: "/user#/subscription?type=subscription",
             },
           };
         },
         methods: {
+          addPopupGtagEvent() {
+            gtag("event", "view_item", {
+              items: [
+                {
+                  item_id: this.popup.URL,
+                  item_name: this.popup.itemName,
+                },
+              ],
+            });
+          },
           startIntroJS(force = false) {
             const cookie_key = "_fooocus_introjs_showed";
             if (!force && window.Cookies.get(cookie_key)) {
@@ -1528,6 +1539,7 @@
                   this.popup.message = "Potential NSFW content was detected in the generated image, upgrade to enable your private image storage.";
                   this.popup.itemName = "refocus_nsfw_checker";
                   this.popup.isOpen = true;
+                  this.addPopupGtagEvent();
                 }
               }
               if (status.status === "skipped") {
@@ -1554,6 +1566,7 @@
                 this.popup.message = "You have ran out of your credits, please purchase more or upgrade to a higher plan.";
                 this.popup.itemName = "refocus_insufficient_credits";
                 this.popup.isOpen = true;
+                this.addPopupGtagEvent();
                 this.stopLoading = false;
                 this.generating = false;
               }
@@ -2141,16 +2154,15 @@
             this.estimateBlipConsume.discount = result.discount;
           },
           openSubscriptionPage() {
-            const url = "/user#/subscription?type=subscription";
             gtag("event", "begin_checkout", {
               items: [
                 {
-                  item_id: url,
+                  item_id: this.popup.URL,
                   item_name: this.popup.itemName,
                 },
               ],
             });
-            window.open(url, "_blank");
+            window.open(this.popup.URL, "_blank");
             this.popup.isOpen = false;
           },
           updateLCMOptions() {
