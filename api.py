@@ -1232,9 +1232,6 @@ def create_api(
             await create_tables()
             database_created = True
 
-        base64_encoded_user_id = base64.b64encode(
-            request.headers["user-id"].encode('utf-8')
-        ).decode('utf-8')
         return templates.TemplateResponse(
             "ui.html",
             {
