@@ -1199,6 +1199,15 @@
             introjs.onexit(() => window.Cookies.set(cookie_key, true, { expires: 360 }));
             introjs.start();
           },
+          checkNSFW(is_nsfw) {
+            if (is_nsfw.length === 0 || !is_nsfw[is_nsfw.length - 1]) {
+              return;
+            }
+            this.popup.message = "Potential NSFW content was detected in the generated image, upgrade to enable your private image storage.";
+            this.popup.itemName = "refocus_nsfw_checker";
+            this.popup.isOpen = true;
+            this.addPopupGtagEvent();
+          },
           pushHistory(errorMessage = null) {
             this.historyResults.unshift({
               taskId: this.runningTaskId,
@@ -1504,12 +1513,7 @@
                   this.runningTaskResultImages = status.images.map(item => {
                     return {src: item.encoded_image, id: item.image_id}});
                 }
-                if (status.is_nsfw.length > 0 && status.is_nsfw[status.is_nsfw.length - 1]) {
-                  this.popup.message = "Potential NSFW content was detected in the generated image, upgrade to enable your private image storage.";
-                  this.popup.itemName = "refocus_nsfw_checker";
-                  this.popup.isOpen = true;
-                  this.addPopupGtagEvent();
-                }
+                this.checkNSFW(status.is_nsfw);
               }
               if (status.status === "skipped") {
                 this.skipLoading = false;
@@ -1524,6 +1528,7 @@
                   this.runningTaskResultImages = status.images.map(item => {
                     return {src: item.encoded_image, id: item.image_id}});
                 }
+                this.checkNSFW(status.is_nsfw);
                 this.pushHistory();
               }
               if (status.status === "failed") {
