@@ -844,7 +844,7 @@ def worker():
                 yield_result(
                     async_task,
                     target_images,
-                    do_not_show_finished_images=len(tasks) == 1,
+                    do_not_show_finished_images=(current_task_id == len(tasks) - 1),
                     img_paths=img_paths,
                     is_nsfw=is_nsfw_list,
                 )
