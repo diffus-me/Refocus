@@ -43,7 +43,19 @@ You could use any sql database that is supported by sqlalchemy, but you need to 
 
 Original gradio ui is also available at the root path. If you use it on your local machine, it will be [http://localhost:7865](http://localhost:7865)
 
+
+# Hosted Refocus
+
+If you need a hosted version of Refocus on the cloud where you could access it anywhere without worrying about purchasing expensive GPUs or dealing with the installation, you can use our service at [Diffus](https://www.diffus.graviti.com/?utm_source=huggingface&utm_campaign=github_refocus).
+It also has a hosted automatic1111/stable-diffusion-webui
+
+Diffus team is behind the development of Refocus, you can reach us on our [Discrod server](https://discord.gg/wXhQvWqE9p).
+
+
 ---
+
+# Original Readme
+
 
 ## How Fooocus stands out 
 
