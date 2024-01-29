@@ -1005,6 +1005,18 @@ def create_api(
                     task_id=error.task_id,
                     status=f"MonitorException.{error.status_code}",
                     message=str(error),
+                    progress=100,
+                ).dict()
+            )
+            raise
+        except Exception as e:
+            logger.exception(f'un-handled prediction exception: {e.__str__()}')
+            await websocket.send_json(
+                GenerationProgress(
+                    task_id=task_id,
+                    status=f"failed",
+                    message=str(e),
+                    progress=100,
                 ).dict()
             )
             raise
