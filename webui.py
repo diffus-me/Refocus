@@ -21,6 +21,7 @@ import logging
 import uuid
 import asyncio
 from typing import Any
+import yaml
 
 from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
@@ -28,8 +29,14 @@ from modules.ui_gradio_extensions import reload_javascript
 from modules.auth import auth_enabled, check_auth
 from modules import script_callbacks
 
+from fastapi import FastAPI
 from api import settings, Status, QueuingStatus, Progress, create_api
 
+import logging.config
+
+
+with open(os.path.join(os.path.dirname(__file__), "log_conf.yml"), "r") as f:
+    logging.config.dictConfig(yaml.safe_load(f.read()))
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -899,7 +906,37 @@ def dump_default_english_config():
 # dump_default_english_config()
 
 
-def launch_app_with_gradio(server_port):
+def launch_uvicorn_server(app: FastAPI, log_level: str = "info"):
+    import uvicorn
+    from gradio.networking import Server
+    port = getattr(app, 'port', args_manager.args.port)
+    host = getattr(app, 'host', args_manager.args.listen)
+    config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
+    server = Server(config)
+    server.run_in_thread()
+
+
+def launch_app_without_gradio(server_port: int, lifespan = None) -> FastAPI:
+    from starlette.middleware.cors import CORSMiddleware
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    if lifespan is None:
+        app = FastAPI()
+    else:
+        app = FastAPI(lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=['*'],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+    setattr(app, 'port', server_port)
+    setattr(app, 'host', args_manager.args.listen)
+    return app
+
+
+def launch_app_with_gradio(server_port: int):
     title = f'Fooocus {fooocus_version.version}'
 
     if isinstance(args_manager.args.preset, str):
@@ -925,9 +962,11 @@ def launch_app_with_gradio(server_port):
         return app
 
 
-async def block_thread():
+async def block_thread(app: FastAPI):
     logger.info("Starting the async loop and waiting on server")
     called_worker_start = False
+    if args_manager.args.no_gradio:
+        launch_uvicorn_server(app)
     try:
         while True:
             if not called_worker_start and args_manager.args.lazy and len(worker.async_tasks) > 0:
@@ -947,7 +986,10 @@ def start(server_port: int = 0):
         server_port = args_manager.args.port
 
     script_callbacks.before_ui_callback()
-    app = launch_app_with_gradio(server_port)
+    if args_manager.args.no_gradio:
+        app = launch_app_without_gradio(server_port)
+    else:
+        app = launch_app_with_gradio(server_port)
 
     create_api(app, generate_clicked, refresh_seed, recover_task, stop_clicked, skip_clicked, trigger_describe)
     script_callbacks.app_started_callback(shared.gradio_root, app)
@@ -956,7 +998,7 @@ def start(server_port: int = 0):
     if not args_manager.args.lazy:
         worker.start()
 
-    asyncio.run(block_thread())
+    asyncio.run(block_thread(app))
 
 
 if __name__ == '__main__':
