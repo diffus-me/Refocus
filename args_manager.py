@@ -33,6 +33,8 @@ args_parser.parser.set_defaults(
 )
 args_parser.parser.add_argument("--lazy", action='store_true', default=False,
                                 help="Only start worker thread when there are tasks in the queue.")
+args_parser.parser.add_argument("--no-gradio", action='store_true', default=False,
+                                help="Disable gradio from lauching if required.")
 
 args_parser.parser.add_argument("--logging-level", type=str, help="logging level", default='INFO')
 args_parser.parser.add_argument("--logging-file-dir", type=str, help="Where to save logs file", default='')
