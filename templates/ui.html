@@ -1579,10 +1579,6 @@
             socket.onerror = (error) => {
               // TODO: show error message
               console.log("WebSocket error:", error);
-              if (this.generating) {
-                this.generating = false;
-                this.stopLoading = false;
-              }
             };
             socket.onclose = (event) => {
               console.log("WebSocket connection closed:", event.code);
