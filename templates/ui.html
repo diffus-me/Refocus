@@ -1203,17 +1203,119 @@
               message: "",
               URL: "/user#/subscription?type=subscription",
             },
+            analyticsProductInfo: {
+              itemsMapping: {},
+              itemsInLists: {},
+            },
           };
         },
         methods: {
-          addPopupGtagEvent() {
-            gtag("event", "view_item", {
-              items: [
+          getItemsMapping(callback = null) {
+            fetch(
+              '/api/analytics/items',
+              {
+                method: 'GET',
+                credentials: 'include',
+              }
+            )
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .then((data) => {
+              this.analyticsProductInfo.itemsMapping = data.items_mapping;
+              this.analyticsProductInfo.itemsInLists = data.items_in_lists;
+            })
+            .catch((error) => {
+              console.error('loadItemMappingError error:', error);
+            })
+            .finally(() => {
+              if (typeof callback === 'function') {
+                callback();
+              }
+            });
+          },
+          reportCheckout(listUniqueId, listName, brandName, callback = null) {
+            const date = new Date();
+            fetch(
+              '/api/analytics/checkout',
+              {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  list_id: listUniqueId,
+                  list_name: listName,
+                  item_brand: brandName,
+                  created_at: date.toISOString(),
+                })
+              }
+            )
+            .then(response => {
+              if (response.status === 200) {
+                return response.json();
+              }
+              return Promise.reject(response);
+            })
+            .catch((error) => {
+              console.error('reportCheckout error:', error);
+            })
+            .finally(() => {
+              if (typeof callback === 'function') {
+                callback();
+              }
+            });
+          },
+          getItemUniqueId(listID) {
+            for (let key in this.analyticsProductInfo.itemsMapping) {
+              if (listID.includes(key)) {
+                return this.analyticsProductInfo.itemsMapping[key];
+              }
+            }
+            return null;
+          },
+          getProductInformation() {
+            const listUniqueId = this.getItemUniqueId(this.popup.URL) || this.popup.URL;
+            const domain = window.location.protocol + '//' + window.location.host;
+            let items = [];
+            if (this.analyticsProductInfo.itemsInLists[listUniqueId]) {
+              items = this.analyticsProductInfo.itemsInLists[listUniqueId].map(item => {
+                return {
+                  item_id: item.item_id,
+                  item_name: item.item_name,
+                  item_brand: domain,
+                  item_category: item.item_category,
+                  item_list_id: listUniqueId,
+                  item_list_name: this.popup.itemName,
+                  price: item.price,
+                  quantity: item.quantity,
+                };
+              });
+            } else {
+              items = [
                 {
-                  item_id: this.popup.URL,
+                  item_id: listUniqueId,
                   item_name: this.popup.itemName,
                 },
-              ],
+              ];
+            }
+            return {
+              listUniqueId: listUniqueId,
+              listName: this.popup.itemName,
+              items: items,
+              domain: domain,
+            };
+          },
+          addPopupGtagEvent() {
+            const { listUniqueId, listName, items } = this.getProductInformation();
+            gtag("event", "view_item_list", {
+              item_list_id: listUniqueId,
+              item_list_name: listName,
+              items: items,
             });
           },
           startIntroJS(force = false) {
@@ -2155,13 +2257,13 @@
             this.estimateBlipConsume.discount = result.discount;
           },
           openSubscriptionPage() {
+            const { listUniqueId, listName, items, domain } = this.getProductInformation();
+            const reportCheckout = this.reportCheckout;
             gtag("event", "begin_checkout", {
-              items: [
-                {
-                  item_id: this.popup.URL,
-                  item_name: this.popup.itemName,
-                },
-              ],
+              items: items,
+              event_callback: function () {
+                reportCheckout(listUniqueId, listName, domain);
+              }
             });
             window.open(this.popup.URL, "_blank");
             this.popup.isOpen = false;
@@ -2242,6 +2344,7 @@
               "default",
               () => {this.initializeFilerobot(); this.startIntroJS()}
           );
+          this.getItemsMapping();
         },
       }).use(vuetify).mount('#app');
     </script>
