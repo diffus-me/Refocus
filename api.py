@@ -330,11 +330,21 @@ class LoraOptions(BaseModel):
     lora_weight: float = Field(description="Lora weight.")
 
 
+class StyleOption(BaseModel):
+    style_name: str = Field(description="Style name.")
+    style_preview: str = Field(description="Style preview images.")
+
+
+class StyleOptions(BaseModel):
+    options: list[StyleOption] = Field(description="Style options.")
+    default_list: list[str] = Field(default=[], description="Default value list for the field.")
+
+
 class DefaultOptions(BaseModel):
     hostname: str = Field(description="Base url of the websocket.")
     performances: OptionList = Field(description="Performance options.")
     aspect_ratios: OptionList = Field(description="Aspect ratio options.")
-    styles: OptionList = Field(description="Style options.")
+    styles: StyleOptions = Field(description="Style options.")
     base_models: OptionList = Field(description="Avaialable SD checkpoints.")
     refiner_models: OptionList = Field(description="Avaialable refiners.")
     refiner_switch: float = Field(description="When to switch to a refiner model. Value needs to be between 0.0 ~ 1.0")
@@ -1028,9 +1038,13 @@ def create_api(
                     for x in config_dict.get("available_aspect_ratios", modules.config.available_aspect_ratios)
                 ],
             ),
-            styles=OptionList(
+            styles=StyleOptions(
                 default_list=list(config_dict.get("default_styles", modules.config.default_styles)),
-                options=copy.deepcopy(style_sorter.all_styles),
+                options=[
+                    StyleOption(
+                        style_name=style_name,
+                        style_preview=f"/file=sdxl_styles/samples/{style_name.lower().replace(' ', '_')}.jpg")
+                    for style_name in copy.deepcopy(style_sorter.all_styles)],
             ),
             base_models=OptionList(
                 default=config_dict.get("default_model", modules.config.default_base_model_name),

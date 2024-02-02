@@ -571,12 +571,33 @@
                   <v-combobox
                     v-model="selectedStyles"
                     :items="styles"
+                    item-title="name"
+                    item-value="name"
+                    :return-object="false"
                     label="Select specific style(s)"
                     multiple
                     chips
                     small-chips
-                  ></v-combobox>
-                </v-window-item>
+                  >
+                    <template v-slot:item="{ props, item }">
+                      <v-list-item v-bind="props">
+                        <template v-slot:prepend>
+                          <v-avatar @mouseover="mouseMoveToStylePreview(item.raw.image)">
+                            <v-img :src="item.raw.image"></v-img>
+                          </v-avatar>
+                        </template>
+                      </v-list-item>
+                    </template>
+                  </v-combobox>
+                  <v-overlay
+                    v-model="styleOverlay.show"
+                    class="align-center justify-center"
+                    min-height="300"
+                    min-width="300"
+                    @mousemove="styleOverlay.show = false"
+                  >
+                    <v-img :src="styleOverlay.src"></v-img>
+                  </v-overlay>                </v-window-item>
                 <v-window-item  value="models">
                   <v-row>
                     <v-col
@@ -1079,9 +1100,18 @@
             availableSamplers: [],
             selectedScheduler: "karras",
             availableSchedulers: [],
+            styleOverlay: {
+              show: false,
+              src: "",
+            },
           };
         },
         methods: {
+          mouseMoveToStylePreview(src) {
+            console.log(src);
+            this.styleOverlay.show = true;
+            this.styleOverlay.src = src;
+          },
           previewUserImage(image, imageSrcProperty, index=null) {
             const file = event.target.files[0];
             if (file) {
@@ -1643,7 +1673,12 @@
               this.performance = options.performances.default;
               this.aspectRatios = options.aspect_ratios.options;
               this.aspectRatio = options.aspect_ratios.default;
-              this.styles = options.styles.options;
+              this.styles = options.styles.options.map(style => {
+                return {
+                  name: style.style_name,
+                  image: style.style_preview,
+                }
+              });
               this.selectedStyles = options.styles.default_list;
               this.baseModels = options.base_models.options;
               this.baseModel = options.base_models.default;
