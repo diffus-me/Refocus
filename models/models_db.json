@@ -7,6 +7,13 @@
         "base": "SDXL"
     },
     {
+        "model_type": "checkpoint",
+        "name": "juggernautXL_v8Rundiffusion.safetensors",
+        "sha256": "aeb7e9e6897a1e58b10494bd989d001e3d4bc9b634633cd7b559838f612c2867",
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_v8Rundiffusion.safetensors",
+        "base": "SDXL"
+    },
+    {
         "model_type": "lora",
         "name": "sd_xl_offset_example-lora_1.0.safetensors",
         "sha256": "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f",
@@ -18,6 +25,13 @@
         "name": "bluePencilXL_v050.safetensors",
         "sha256": "8c462a80f4b5291b24feb624d67248bd09f71f9074d7014d8ad7901b120bdcc7",
         "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/bluePencilXL_v050.safetensors",
+        "base": "SDXL"
+    },
+    {
+        "model_type": "checkpoint",
+        "name": "animaPencilXL_v100.safetensors",
+        "sha256": "7ed8da12d980f7ec628af7366ca1d9a85b519793e0cd5c66e05f3bc2a8417279",
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/animaPencilXL_v100.safetensors",
         "base": "SDXL"
     },
     {
@@ -39,6 +53,13 @@
         "name": "realisticStockPhoto_v10.safetensors",
         "sha256": "2d44ce378ddcc922769df4effe74dae3370a887ea9897093e1f5fbdc50b67a02",
         "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v10.safetensors",
+        "base": "SDXL"
+    },
+    {
+        "model_type": "checkpoint",
+        "name": "realisticStockPhoto_v20.safetensors",
+        "sha256": "f99f3dec38a09b4834a4a073bdc45aabd42b422b4d327f5e8001afcb5ffb5f45",
+        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v20.safetensors",
         "base": "SDXL"
     },
     {
