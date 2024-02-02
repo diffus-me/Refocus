@@ -560,10 +560,6 @@ def make_gradio_ui(root_block: gr.Blocks):
                     gr.HTML(f'<a href="file={get_current_html_path()}" target="_blank">\U0001F4DA History Log</a>')
 
             with gr.Tab(label='Style'):
-                style_sorter.try_load_sorted_styles(
-                    style_names=legal_style_names,
-                    default_selected=modules.config.default_styles)
-
                 style_search_bar = gr.Textbox(show_label=False, container=False,
                                               placeholder="\U0001F50E Type here to search styles ...",
                                               value="",
@@ -982,6 +978,10 @@ async def block_thread(app: FastAPI):
 
 
 def start(server_port: int = 0):
+    style_sorter.try_load_sorted_styles(
+        style_names=legal_style_names,
+        default_selected=modules.config.default_styles)
+
     if server_port == 0:
         server_port = args_manager.args.port
 
