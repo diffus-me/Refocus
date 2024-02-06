@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import aiohttp
+import fastapi
+import websockets
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +196,7 @@ async def monitor_call_context(
 
     async with aiohttp.ClientSession() as session:
         try:
-            task_id = await _before_task_started(
+            step_id = await _before_task_started(
                 session,
                 request_headers,
                 api_name,
@@ -209,14 +211,19 @@ async def monitor_call_context(
                 status = 'failed'
             else:
                 status = 'finished'
+        except websockets.ConnectionClosedOK:
+            logger.warning(f"step {step_id}: Client disconnected")
+        except fastapi.WebSocketDisconnect:
+            logger.warning(f"step {step_id}: Client disconnected")
         except Exception as e:
+            logger.exception(f'step {step_id} failed: {e.__str__()}')
             status = 'failed'
             message = f'{type(e).__name__}: {str(e)}'
             raise e
         finally:
             await _after_task_finished(session,
                                        request_headers,
-                                       task_id,
+                                       step_id,
                                        status,
                                        message,
                                        is_intermediate,
