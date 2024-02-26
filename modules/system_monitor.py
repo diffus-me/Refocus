@@ -196,7 +196,7 @@ async def monitor_call_context(
 
     async with aiohttp.ClientSession() as session:
         try:
-            step_id = await _before_task_started(
+            task_id = await _before_task_started(
                 session,
                 request_headers,
                 api_name,
@@ -212,18 +212,18 @@ async def monitor_call_context(
             else:
                 status = 'finished'
         except websockets.ConnectionClosedOK:
-            logger.warning(f"step {step_id}: Client disconnected")
+            logger.warning(f"step {task_id}: Client disconnected")
         except fastapi.WebSocketDisconnect:
-            logger.warning(f"step {step_id}: Client disconnected")
+            logger.warning(f"step {task_id}: Client disconnected")
         except Exception as e:
-            logger.exception(f'step {step_id} failed: {e.__str__()}')
+            logger.exception(f'step {task_id} failed: {e.__str__()}')
             status = 'failed'
             message = f'{type(e).__name__}: {str(e)}'
             raise e
         finally:
             await _after_task_finished(session,
                                        request_headers,
-                                       step_id,
+                                       task_id,
                                        status,
                                        message,
                                        is_intermediate,
