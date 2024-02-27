@@ -91,6 +91,20 @@
         "base": "SDXL"
     },
     {
+        "model_type": "checkpoint",
+        "name": "sdxl_lightning_4step.safetensors",
+        "sha256": "e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490",
+        "url": "https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors",
+        "base": "SDXL"
+    },
+    {
+        "model_type": "checkpoint",
+        "name": "dreamshaperXL_lightningDPMSDE.safetensors",
+        "sha256": "fdbe56354b8f876b736f24d3ad867ecd4140c019f57642ec8ddd878088d44f64",
+        "url": "https://civitai.com/api/download/models/354657?type=Model&format=SafeTensor&size=full&fp=fp16",
+        "base": "SDXL"
+    },
+    {
         "model_type": "lora",
         "name": "sdxl_lcm_lora.safetensors",
         "sha256": "c3dbf7eb26dd00ae6b6b95da69be9f1cb95a3b2c5bcf9be82323227a19b91329",
