@@ -402,6 +402,7 @@ class DefaultOptions(BaseModel):
     scheduler: OptionList = Field(description="Scheduler options.")
     prompt: str = Field(description="Default prompt for generation.")
     negative_prompt: str = Field(description="Default negative prompt for generation.")
+    steps: int | None = Field(description="Default steps for generation.", default=None)
     presets: OptionList = Field(description="Presets for settings for a specific genre.")
 
 
@@ -1179,6 +1180,7 @@ def create_api(
             ),
             prompt=config_dict.get("default_prompt", modules.config.default_prompt),
             negative_prompt=config_dict.get("default_prompt_negative", modules.config.default_prompt_negative),
+            steps=config_dict.get("default_steps", None),
             presets=OptionList(default="default", options=await list_presets(settings.preset_dir)),
         )
 

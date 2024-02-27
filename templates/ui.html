@@ -819,6 +819,26 @@
                     :items="availableSchedulers"
                     :disabled="isLCMMode"
                   ></v-select>
+                  <v-slider
+                    v-model="forcedSteps"
+                    v-if="forcedSteps >= 1"
+                    :min="0"
+                    :max="200"
+                    :step="1"
+                    :disabled="true"
+                    label="Sampling Steps"
+                  >
+                    <template v-slot:append>
+                      <v-text-field
+                        v-model="forcedSteps"
+                        hide-details
+                        single-line
+                        density="compact"
+                        type="number"
+                        style="width: 70px"
+                      ></v-text-field>
+                    </template>
+                  </v-slider>
                 </v-window-item>
               </v-window>
             </v-expansion-panel-text>
@@ -1099,6 +1119,7 @@
             prompt: '',
             _performance: 'Speed',
             performanceOptions: [],
+            forcedSteps: null,
             aspectRatio: '1:1',
             aspectRatios: [],
             imageNumber: 2,
@@ -1188,6 +1209,7 @@
               "realistic": "light-blue",
               "sai": "pink",
               "turbo": "amber",
+              "lighting": "blue-accent-3",
             },
             selectedSampler: "dpmpp_2m_sde_gpu",
             availableSamplers: [],
@@ -1533,6 +1555,9 @@
             };
             if (this.refiner !== "None") {
               genParams.refiner_switch = this.refinerSwitch;
+            }
+            if (this.forcedSteps >= 1) {
+              genParams.advanced_options.overwrite_step = this.forcedSteps;
             }
             if (this.showImageOptions) {
               if (this.imageOptionTab === "uov") {
@@ -1999,6 +2024,7 @@
               this.nonLCMArguments = {};
               this.performanceOptions = options.performances.options;
               this.performance = options.performances.default;
+              this.forcedSteps = options.steps;
 
               this.selectingPreset = false;
               this.loadingPreset = false;
