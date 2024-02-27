@@ -807,6 +807,18 @@
                       ></v-text-field>
                     </template>
                   </v-slider>
+                  <v-select
+                    v-model="selectedSampler"
+                    label="Sampler"
+                    :items="availableSamplers"
+                    :disabled="isLCMMode"
+                  ></v-select>
+                  <v-select
+                    v-model="selectedScheduler"
+                    label="Scheduler"
+                    :items="availableSchedulers"
+                    :disabled="isLCMMode"
+                  ></v-select>
                 </v-window-item>
               </v-window>
             </v-expansion-panel-text>
