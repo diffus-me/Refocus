@@ -2282,7 +2282,7 @@
                   "query": queryString
                 });
                 if (eventName === "CompleteRegistration") {
-                  Cookie.set('_complete_registration', 'true', { expires: 365 });
+                  Cookies.set('_complete_registration', 'true', { expires: 365 });
                 }
               } catch (error) {
                 console.error(error);
@@ -2594,7 +2594,7 @@
             if (newInfo) {
               await this.reportIdentity(
                 newInfo.user_id, newInfo.email);
-              const completeRegistration = Cookie.get('_complete_registration');
+              const completeRegistration = Cookies.get('_complete_registration');
               if (!completeRegistration) {
                 await this.reportViewContent("CompleteRegistration");
               }
