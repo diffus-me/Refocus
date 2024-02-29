@@ -106,12 +106,16 @@
       function gtag() { dataLayer.push(arguments); }
       gtag("js", new Date());
 
-      gtag("config", "G-6SKEYMGQ07", {
-        user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
-      });
-      gtag("config", "G-649WH3932W", {
-        user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
-      });
+      const domain = window.location.hostname;
+      if (domain.includes("diffus.me")) {
+        gtag("config", "G-649WH3932W", {
+          user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
+        });
+      } else {
+        gtag("config", "G-6SKEYMGQ07", {
+          user_id: "{{base64_encoded_user_id}}", user_properties: { user_tier: "{{user_tier}}" },
+        });
+      }
     </script>
     <script>
       !function (w, d, t) {
@@ -1196,6 +1200,58 @@
 
         return hashHex;
       }
+
+      function ttqTrack(event, data) {
+        const date = new Date();
+        const eventId = crypto.randomUUID();
+        const urlSearchParams = new URLSearchParams(window.location.search);
+        const ttclidValue = urlSearchParams.get("ttclid");
+        let url = "/api/analytics/ttq";
+        if (ttclidValue) {
+          url =
+            "/api/analytics/ttq?" +
+            new URLSearchParams({
+              ttclid: ttclidValue,
+            });
+        }
+        fetch(url, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            event: event,
+            event_time: Math.floor(date.getTime() / 1000),
+            event_id: eventId,
+            page: {
+              url: window.location.href,
+            },
+            contents: data.contents,
+            value: data.value,
+            currency: data.currency,
+            query: data.query,
+          }),
+        })
+          .then((response) => {
+            if (response.status === 200) {
+              return response.json();
+            }
+            return Promise.reject(response);
+          })
+          .catch((error) => {
+            console.error("reportCheckout error:", error);
+          })
+          .finally(() => {
+            if (typeof ttq.track === "function") {
+              try {
+                ttq.track(event, data, {event_id: eventId});
+              } catch (error) {
+                console.error(error);
+              }
+            }
+          });
+      }
     </script>
     <script>
       const { createApp } = Vue;
@@ -1460,7 +1516,7 @@
               item_list_name: listName,
               items: items,
             });
-            if (typeof ttq.track === "function") {
+            if (typeof ttqTrack === "function") {
               const contents = items.map(item => {
                   return {
                       "content_id": item.item_id,
@@ -1479,7 +1535,7 @@
                   }
               }, 0);
               try {
-                  ttq.track('AddToCart', {
+                  ttqTrack('AddToCart', {
                       "contents": contents,
                       "value": total_value,
                       "currency": "USD",
@@ -1779,9 +1835,9 @@
                 virtual_currency_name: "credits",
                 item_name: "refocus_generate_button",
               });
-              if (typeof ttq.track === "function") {
+              if (typeof ttqTrack === "function") {
                   const domain = window.location.hostname;
-                  ttq.track('ClickButton', {
+                  ttqTrack('ClickButton', {
                     "contents": [
                       {
                         "content_id": domain + ":refocus_generate_button",
@@ -2268,9 +2324,9 @@
             const queryString = window.location.search;
             const pageFull = domain + "/" + path;
             const page_id = await sha256(pageFull);
-            if (typeof ttq.track === "function") {
+            if (typeof ttqTrack === "function") {
               try {
-                ttq.track(eventName, {
+                ttqTrack(eventName, {
                   "contents": [
                     {
                       "content_id": page_id,
@@ -2314,7 +2370,7 @@
               if (typeof ttq.identify === "function") {
                   try {
                       ttq.identify({
-                          "email": await sha256(userEmail),
+                          "email": await sha256(userEmail.toLowerCase()),
                           "external_id": await sha256(userId)
                       });
                   } catch (error) {
@@ -2515,7 +2571,7 @@
             });
             window.open(this.popup.URL, "_blank");
             this.popup.isOpen = false;
-            if (typeof ttq.track === "function") {
+            if (typeof ttqTrack === "function") {
                 const contents = items.map(item => {
                     return {
                         "content_id": item.item_id,
@@ -2534,7 +2590,7 @@
                     }
                 }, 0);
                 try {
-                    ttq.track('InitiateCheckout', {
+                    ttqTrack('InitiateCheckout', {
                         "contents": contents,
                         "value": total_value,
                         "currency": "USD",
@@ -2598,6 +2654,7 @@
               if (!completeRegistration) {
                 await this.reportViewContent("CompleteRegistration");
               }
+              await this.reportViewContent("ViewContent");
             }
           },
         },
@@ -2633,7 +2690,6 @@
           );
           this.getItemsMapping();
           this.getUserOrderInformation();
-          await this.reportViewContent("ViewContent");
         },
       }).use(vuetify).mount('#app');
     </script>
