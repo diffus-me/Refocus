@@ -199,10 +199,10 @@
   </head>
   <body>
     <div id="app">
-      <v-dialog v-model="popup.isOpen" width="auto">
+      <v-dialog v-model="popup.isOpen" width="50%">
         <v-card border="1000">
           <v-card-title class="text-h5"> Upgrade Now </v-card-title>
-            <v-card-text class="text-body-1"> [[popup.message]] </v-card-text>
+            <v-card-text class="text-body-1" v-html="popup.message"></v-card-text>
             <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn color="grey-darken-1" variant="text" @click="popup.isOpen = false">
@@ -1190,6 +1190,8 @@
     <script type="text/javascript" src="/api/focus/static/js/utils.js"></script>
     <script type="module" src="/api/focus/static/js/cookieconsent-config.mjs"></script>
     <script>
+      const AFFILIATE_PROGRAM = '<a href="/affiliate/everyone" target="_blank" style="text-wrap: nowrap">Affiliate Program</a>';
+
       async function sha256(message) {
         const msgBuffer = new TextEncoder().encode(message);
 
@@ -1559,7 +1561,10 @@
             if (is_nsfw.length === 0 || !is_nsfw[is_nsfw.length - 1]) {
               return;
             }
-            this.popup.message = "Potential NSFW content was detected in the generated image, upgrade to enable your private image storage.";
+            this.popup.message =
+                `Potential NSFW content was detected in the generated image, \
+                 upgrade to enable your private image storage. Or join our ${AFFILIATE_PROGRAM} \
+                 to earn cash or credits and use it to upgrade to <b>Basic</b> plan.`;
             this.popup.itemName = "refocus_nsfw_checker";
             this.popup.isOpen = true;
             this.addPopupGtagEvent();
@@ -1913,7 +1918,9 @@
                 this.pushHistory(status.message);
               }
               if (status.status === "MonitorException.402") {
-                this.popup.message = "You have ran out of your credits, please purchase more or upgrade to a higher plan.";
+                this.popup.message =
+                      `You have ran out of your credits, please purchase more or upgrade to a \
+                      higher plan. Join our ${AFFILIATE_PROGRAM} to earn cash or credits.`;
                 this.popup.itemName = "refocus_insufficient_credits";
                 this.popup.isOpen = true;
                 this.addPopupGtagEvent();
