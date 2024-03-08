@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import os
 import socket
+import time
 import uuid
 from datetime import datetime, timezone
 from functools import cache
@@ -1269,6 +1270,7 @@ def create_api(
                     request.headers["user-id"].encode('utf-8')
                 ).decode('utf-8'),
                 "user_tier": request.headers["user-tier"],
+                "js_version": time.time(),
             }
         )
 
