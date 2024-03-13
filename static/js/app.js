@@ -1,0 +1,1272 @@
+const { createApp } = Vue;
+const { createVuetify } = Vuetify;
+
+const defaultTheme = {
+  dark: true,
+  colors: {
+    background: "#0b0f19",
+    primary: "#5a3cff",
+  },
+};
+
+const vuetify = createVuetify({
+  theme: {
+    defaultTheme: "defaultTheme",
+    themes: {
+      defaultTheme,
+    },
+  },
+});
+
+createApp({
+  delimiters: ["[[", "]]"],
+  data() {
+    return {
+      hostname: "",
+      settingTab: "settings",
+      prompt: "",
+      _performance: "Speed",
+      performanceOptions: [],
+      forcedSteps: null,
+      aspectRatio: "1:1",
+      aspectRatios: [],
+      imageNumber: 2,
+      negativePrompt: "",
+      isRandom: true,
+      randomSeed: 0,
+      selectedStyles: [],
+      styles: [],
+      baseModel: "",
+      baseModels: [],
+      refiner: "",
+      refiners: [],
+      refinerSwitch: 0.5,
+      loraModels: [],
+      numLoras: 0,
+      selectedLoraModels: [],
+      selectedLoraWeights: [],
+      guidanceScale: 4.0,
+      imageSharpness: 2.0,
+      defaultOptions: {},
+      runningTaskId: "",
+      runningTaskStatus: "",
+      runningTaskProgress: 0,
+      runningTaskMessage: "",
+      runningTaskReturnUrl: false,
+      runningTaskPreviewImage: "",
+      runningTaskResultImages: [],
+      runningTaskQueueLength: 0,
+      runningTaskQueuePosiiton: 0,
+      generating: false,
+      generatingParams: {},
+      waiting: true,
+      maxHistory: 10,
+      historyResults: [],
+      previewDialog: false,
+      previewIndex: 0,
+      previewImages: [],
+      likeButtonColor: {},
+      favoriteButtonColor: {},
+      shareButtonColor: {},
+      skipLoading: false,
+      stopLoading: false,
+      panelName: "image_options",
+      showImageOptions: false,
+      imageOptionTab: "uov",
+      uovSelection: "Disabled",
+      uovMethods: [],
+      imagePrompts: [],
+      ipTypes: [],
+      numImagePrompts: 4,
+      imagePromptImages: [],
+      imagePromptAdvancedPanel: "",
+      imagePromptDefaultValues: {},
+      contentTypeSelection: "Photograph",
+      contentTypes: [],
+      describeImageUploader: null,
+      inpaintImageUploader: null,
+      inpaintImageFiles: [],
+      inpaintSelection: "Inpaint or Outpaint (default)",
+      outpaintDirection: [],
+      inpaintImprovementPrompt: "",
+      inpaintModificationPrompt: "",
+      inpaintStep: "Upload Image",
+      uovImageFile: "",
+      imageRules: [
+        (value) => {
+          return (
+            !value ||
+            !value.length ||
+            value[0].size < 10000000 ||
+            "Avatar size should be less than 10 MB!"
+          );
+        },
+      ],
+      imageEditor: null,
+      imageOptionsCloseButtonHover: false,
+      toolObserver: null,
+      optionsObserver: null,
+      describeImageLoading: false,
+      selectedPreset: "",
+      availablePresets: [],
+      selectingPreset: false,
+      loadingPreset: false,
+      presetName: {
+        default: "cinematic",
+        sai: "stability ai",
+      },
+      presetColor: {
+        default: "green",
+        anime: "deep-orange",
+        lcm: "light-green",
+        realistic: "light-blue",
+        sai: "pink",
+        turbo: "amber",
+        lighting: "blue-accent-3",
+      },
+      selectedSampler: "dpmpp_2m_sde_gpu",
+      availableSamplers: [],
+      selectedScheduler: "karras",
+      availableSchedulers: [],
+      styleOverlay: {
+        show: false,
+        src: "",
+      },
+      nonLCMArguments: {},
+      estimateConsume: {
+        args: {},
+        timeoutId: null,
+        inference: "-",
+        discount: 0,
+        imageNumber: 2,
+      },
+      estimateBlipConsume: {
+        inference: "-",
+        discount: 0,
+      },
+      popup: {
+        isOpen: false,
+        itemName: "",
+        message: "",
+        URL: "/user#/subscription?type=subscription",
+      },
+      userOrderInformation: null,
+    };
+  },
+  methods: {
+    startIntroJS(force = false) {
+      const cookie_key = "_fooocus_introjs_showed";
+      if (!force && window.Cookies.get(cookie_key)) {
+        return;
+      }
+      const introjs = getIntroJS();
+      introjs.onexit(() =>
+        window.Cookies.set(cookie_key, true, { expires: 360 }),
+      );
+      introjs.start();
+    },
+    checkNSFW(is_nsfw) {
+      if (is_nsfw.length === 0 || !is_nsfw[is_nsfw.length - 1]) {
+        return;
+      }
+      this.popup.message = `Potential NSFW content was detected in the generated image, \
+                 upgrade to enable your private image storage. Or join our ${AFFILIATE_PROGRAM} \
+                 to earn cash or credits and use it to upgrade to <b>Basic</b> plan.`;
+      this.popup.itemName = "refocus_nsfw_checker";
+      this.popup.isOpen = true;
+      addPopupGtagEvent(this.popup.URL, this.popup.itemName);
+    },
+    pushHistory(errorMessage = null) {
+      this.historyResults.unshift({
+        taskId: this.runningTaskId,
+        params: this.generatingParams,
+        paramsTable: this.turnObjParams(this.generatingParams),
+        images: this.runningTaskResultImages,
+        errorMessage: errorMessage,
+      });
+      if (this.historyResults.length > this.maxHistory) {
+        this.historyResults.pop();
+      }
+    },
+    mouseMoveToStylePreview(src) {
+      this.styleOverlay.show = true;
+      this.styleOverlay.src = src;
+    },
+    previewUserImage(image, imageSrcProperty, index = null) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (index != null) this[imageSrcProperty][index] = e.target.result;
+          else this[imageSrcProperty] = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    },
+    clearPreview(imageSrcProperty, index = null) {
+      if (index != null) this[imageSrcProperty][index] = null;
+      else this[imageSrcProperty] = null;
+    },
+    editUserImage(event) {
+      const targetNode = document.getElementById("inpaint-image-editor");
+      const config = { childList: true, subtree: true };
+      if (!this.toolObserver) {
+        const callback = (mutationList, observer) => {
+          const tools = document.querySelectorAll(".FIE_tools-item-wrapper");
+          if (tools.length > 0) {
+            tools.forEach((tool) => {
+              const toolText =
+                tool.querySelector("div > label > span").textContent;
+              if (
+                toolText === "Image" ||
+                toolText === "Polygon" ||
+                toolText === "Arrow"
+              ) {
+                tool.style.display = "none";
+              }
+            });
+          }
+        };
+        this.toolObserver = new MutationObserver(callback);
+        this.toolObserver.observe(targetNode, config);
+      }
+      if (!this.optionsObserver) {
+        const optionsCallback = (mutationList, observer) => {
+          const options = document.querySelectorAll(
+            ".FIE_annotation-option-triggerer",
+          );
+          const penOptions = document.querySelector(".FIE_pen-tool-options");
+          const lineOptions = document.querySelector(".FIE_line-tool-options");
+          if (options.length > 0) {
+            options.forEach((option) => {
+              if (
+                option.title === "Text alignment" ||
+                option.title === "Text spacings" ||
+                option.title === "Shadow" ||
+                option.title === "Corner Radius"
+              ) {
+                option.style.display = "none";
+              }
+              if (!penOptions && !lineOptions) {
+                if (option.title === "Stroke") {
+                  option.style.display = "none";
+                }
+              }
+            });
+          }
+        };
+        this.optionsObserver = new MutationObserver(optionsCallback);
+        this.optionsObserver.observe(targetNode, config);
+      }
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.inpaintImageUploader = e.target.result;
+          this.ImageEditor.render({
+            source: e.target.result,
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    },
+    clearEdit() {
+      this.inpaintImageUploader = null;
+      this.ImageEditor.render();
+    },
+    initializeFilerobot() {
+      const container = document.getElementById("inpaint-image-editor");
+      const config = {
+        tabsIds: [
+          FilerobotImageEditor.TABS.ANNOTATE,
+          FilerobotImageEditor.TABS.RESIZE,
+        ],
+        defaultTabId: FilerobotImageEditor.TABS.ANNOTATE,
+        defaultToolId: FilerobotImageEditor.TOOLS.PEN,
+        observePluginContainerSize: true,
+        annotationsCommon: {
+          fill: "#FFFFFF",
+          stroke: "#FFFFFF",
+          opacity: 0.6,
+        },
+        Pen: {
+          strokeWidth: 30,
+        },
+        Text: {
+          text: "Change me!",
+          fontSize: 28,
+          fontStyle: "bold",
+        },
+        Line: {
+          lineCap: "butt",
+          strokeWidth: 16,
+        },
+        onBeforeSave: () => false,
+        onSave: (imageInfo, designState) => {
+          return false;
+        },
+      };
+      this.ImageEditor = new window.FilerobotImageEditor(container, config);
+    },
+    toggleImageOptions() {
+      if (this.showImageOptions) {
+        this.showImageOptions = false;
+      } else {
+        this.panelName = "image_options";
+        this.showImageOptions = true;
+      }
+    },
+    turnObjParams(obj) {
+      return Object.keys(obj)
+        .filter((key) => {
+          if (key === "uov_input_image") {
+            return false;
+          } else if (key === "ip_ctrls") {
+            return false;
+          } else if (key === "inpaint_input_image") {
+            return false;
+          } else {
+            return obj[key];
+          }
+        })
+        .map((key) => {
+          if (key === "loras") {
+            const lorasHtml = obj[key]
+              .filter((lora) => lora.lora_model.toLowerCase() !== "none")
+              .map((lora, index) => {
+                return `${lora.lora_model}: ${lora.lora_weight}`;
+              })
+              .join("; ");
+            return { name: key, value: lorasHtml };
+          } else if (key === "style_selections") {
+            return { name: key, value: obj[key].join(", ") };
+          } else if (key === "advanced_options") {
+            return {
+              name: key,
+              value: Object.keys(obj[key])
+                .map((secondaryKey) => {
+                  return `${secondaryKey}: ${obj[key][secondaryKey]}`;
+                })
+                .join("\n"),
+            };
+          } else if (obj[key]) {
+            return { name: key, value: obj[key] };
+          }
+        });
+    },
+    packGenerationParameters() {
+      let genParams = {
+        task_id: this.runningTaskId,
+        prompt: this.prompt,
+        negative_prompt: this.negativePrompt,
+        style_selections: this.selectedStyles,
+        performance_selection: this.performance,
+        aspect_ratios_selection: this.aspectRatio,
+        image_number: this.imageNumber,
+        image_seed: this.isRandom ? -1 : this.randomSeed,
+        sharpness: this.imageSharpness,
+        guidance_scale: this.guidanceScale,
+        base_model: this.baseModel,
+        refiner_model: this.refiner,
+        loras: this.selectedLoraModels.map((model, index) => ({
+          lora_model: model,
+          lora_weight: this.selectedLoraWeights[index],
+        })),
+        advanced_options: {
+          sampler_name: this.selectedSampler,
+          scheduler_name: this.selectedScheduler,
+        },
+      };
+      if (this.refiner !== "None") {
+        genParams.refiner_switch = this.refinerSwitch;
+      }
+      if (this.forcedSteps >= 1) {
+        genParams.advanced_options.overwrite_step = this.forcedSteps;
+      }
+      if (this.showImageOptions) {
+        if (this.imageOptionTab === "uov") {
+          if (this.uovImageFile) {
+            genParams.input_image_checkbox = this.showImageOptions;
+            genParams.current_tab = this.imageOptionTab;
+            genParams.uov_method = this.uovSelection;
+            genParams.uov_input_image = {
+              encoded_image: this.uovImageFile,
+            };
+          }
+        } else if (this.imageOptionTab === "ip") {
+          for (const [
+            index,
+            imagePromptUploader,
+          ] of this.imagePromptImages.entries()) {
+            if (imagePromptUploader) {
+              genParams.input_image_checkbox = this.showImageOptions;
+              genParams.current_tab = this.imageOptionTab;
+              if (typeof genParams.ip_ctrls === "undefined") {
+                genParams.ip_ctrls = [];
+              }
+              ip_control = {
+                ip_image: {
+                  encoded_image: imagePromptUploader,
+                },
+                ip_stop: this.imagePrompts[index].params.stopAt,
+                ip_weight: this.imagePrompts[index].params.weight,
+                ip_type: this.imagePrompts[index].params.controlType,
+              };
+              genParams.ip_ctrls.push(ip_control);
+            }
+          }
+        } else if (this.imageOptionTab === "inpaint") {
+          if (this.inpaintImageUploader) {
+            genParams.input_image_checkbox = this.showImageOptions;
+            genParams.current_tab = this.imageOptionTab;
+            const imageData = this.ImageEditor.getCurrentImgData();
+            const inpaintMask = drawAnnotationsOnCanvas(
+              imageData.designState,
+              imageData.imageData.width,
+              imageData.imageData.height,
+            ).toDataURL("image/png");
+            genParams.inpaint_input_image = {
+              image: {
+                encoded_image: this.inpaintImageUploader,
+              },
+              mask: {
+                encoded_image: inpaintMask,
+              },
+            };
+            if (this.inpaintSelection === "Inpaint or Outpaint (default)") {
+              genParams.outpaint_selections = this.outpaintDirection;
+            } else if (
+              this.inpaintSelection ===
+              "Improve Detail (face, hand, eyes, etc.)"
+            ) {
+              genParams.inpaint_additional_prompt =
+                this.inpaintImprovementPrompt;
+            } else if (
+              this.inpaintSelection ===
+              "Modify Content (add objects, change background, etc.)"
+            ) {
+              genParams.inpaint_additional_prompt =
+                this.inpaintModificationPrompt;
+            }
+          }
+        }
+      }
+      return genParams;
+    },
+    startToGenerate(retry) {
+      if (retry > 5) {
+        this.generating = false;
+        return;
+      }
+      let socket = null;
+      let wsProtocol = "wss";
+      if (location.protocol == "http:") {
+        wsProtocol = "ws";
+      }
+      if (this.generating && this.runningTaskId) {
+        socket = new WebSocket(
+          `${wsProtocol}://${this.hostname}/api/focus/ws/generate?` +
+            new URLSearchParams({
+              task_id: this.runningTaskId,
+            }),
+        );
+      } else {
+        this.runningTaskId = randomId();
+        socket = new WebSocket(
+          `${wsProtocol}://${this.hostname}/api/focus/ws/generate?` +
+            new URLSearchParams({
+              new_task_id: this.runningTaskId,
+            }),
+        );
+        reportSpendCreditsEvent(
+          "refocus_generate_button",
+          this.estimateConsume.inference,
+        );
+      }
+      this.generating = true;
+      this.runningTaskMessage = "Preparing...";
+      socket.onopen = (event) => {
+        this.generatingParams = this.packGenerationParameters();
+        socket.send(JSON.stringify(this.generatingParams));
+        this.runningTaskPreviewImage = "";
+        this.runningTaskResultImages = [];
+        this.stopLoading = false;
+        this.skipLoading = false;
+      };
+      socket.onmessage = (event) => {
+        const status = JSON.parse(event.data);
+        this.runningTaskStatus = status.status;
+        this.runningTaskProgress = status.progress;
+        this.runningTaskMessage = status.message;
+        this.runningTaskReturnUrl = status.is_url;
+        this.runningTaskQueueLength = status.queue_length;
+        this.runningTaskQueuePosiiton = status.queue_position;
+        if (status.status === "queueing" || status.status === "preparing") {
+          this.waiting = true;
+        } else {
+          this.waiting = false;
+        }
+        if (status.status === "preview" && status.images.length > 0) {
+          if (status.is_url) {
+            this.runningTaskPreviewImage = status.images[0].image_url;
+          } else {
+            this.runningTaskPreviewImage = status.images[0].encoded_image;
+          }
+        }
+        if (status.status === "results" && status.images.length > 0) {
+          if (status.is_url) {
+            this.runningTaskPreviewImage =
+              status.images[status.images.length - 1].image_url;
+            this.runningTaskResultImages = status.images.map((item) => {
+              return { src: item.image_url, id: item.image_id };
+            });
+          } else {
+            this.runningTaskPreviewImage =
+              status.images[status.images.length - 1].encoded_image;
+            this.runningTaskResultImages = status.images.map((item) => {
+              return { src: item.encoded_image, id: item.image_id };
+            });
+          }
+          this.checkNSFW(status.is_nsfw);
+        }
+        if (status.status === "skipped") {
+          this.skipLoading = false;
+        }
+        if (status.status === "finish") {
+          this.stopLoading = false;
+          this.generating = false;
+          if (status.is_url) {
+            this.runningTaskResultImages = status.images.map((item) => {
+              return { src: item.image_url, id: item.image_id };
+            });
+          } else {
+            this.runningTaskResultImages = status.images.map((item) => {
+              return { src: item.encoded_image, id: item.image_id };
+            });
+          }
+          this.checkNSFW(status.is_nsfw);
+          this.pushHistory();
+        }
+        if (status.status === "failed") {
+          this.stopLoading = false;
+          this.generating = false;
+          this.pushHistory(status.message);
+        }
+        if (status.status === "MonitorException.402") {
+          this.popup.message = `You have ran out of your credits, please purchase more or upgrade to a \
+                      higher plan. Join our ${AFFILIATE_PROGRAM} to earn cash or credits.`;
+          this.popup.itemName = "refocus_insufficient_credits";
+          this.popup.isOpen = true;
+          addPopupGtagEvent(this.popup.URL, this.popup.itemName);
+          this.stopLoading = false;
+          this.generating = false;
+        }
+      };
+      socket.onerror = (error) => {
+        // TODO: show error message
+        console.log("WebSocket error:", error);
+      };
+      socket.onclose = (event) => {
+        console.log("WebSocket connection closed:", event.code);
+        if (this.generating) {
+          if (this.runningTaskId) {
+            setTimeout(() => {
+              this.startToGenerate(retry + 1);
+            }, 3000);
+          } else {
+            this.generating = false;
+            this.stopLoading = false;
+          }
+        }
+      };
+    },
+    skipGeneration() {
+      this.skipLoading = true;
+      fetch(
+        "/api/focus/skip?" +
+          new URLSearchParams({
+            task_id: this.runningTaskId,
+          }),
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        },
+      )
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          if (result.status === "failed") {
+            this.skipLoading = false;
+            // TODO: show error message
+          }
+        })
+        .catch((error) => {
+          this.skipLoading = false;
+          console.error("Post skip error:", error);
+        });
+    },
+    stopGeneration() {
+      this.stopLoading = true;
+      fetch(
+        "/api/focus/stop?" +
+          new URLSearchParams({
+            task_id: this.runningTaskId,
+          }),
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      )
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          if (result.status === "failed") {
+            this.stopLoading = false;
+            // TODO: show error message
+          }
+        })
+        .catch((error) => {
+          this.stopLoading = false;
+          console.error("Post skip error:", error);
+        });
+    },
+    describeImageLocal() {
+      this.describeImageLoading = true;
+      fetch("/api/focus/describe/local", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: this.contentTypeSelection,
+          image: {
+            encoded_image: this.describeImageUploader,
+          },
+        }),
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          this.prompt = result.prompt;
+          this.selectedStyles = result.styles;
+          this.describeImageLoading = false;
+          if (!result.image_id) {
+            // TODO: show error message
+          }
+        })
+        .catch((error) => {
+          this.describeImageLoading = false;
+          console.error("Post describe error:", error);
+        });
+    },
+    toggleRandom() {
+      if (this.isRandom) {
+        this.randomSeed = "";
+      }
+    },
+    expandImage(index, images) {
+      this.previewIndex = index;
+      this.previewImages = images;
+      this.previewDialog = true;
+    },
+    likeOrUnlike(imageId) {
+      let like = true;
+      if (this.likeButtonColor[imageId]) {
+        like = false;
+      }
+      fetch("/api/focus/like", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_id: imageId,
+          like: like,
+        }),
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          if (result.success) {
+            if (result.liked) {
+              this.likeButtonColor[imageId] = "red-lighten-1";
+            } else {
+              this.likeButtonColor[imageId] = "";
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Post like error:", error);
+        });
+    },
+    favoriteOrUnfavorite(imageId) {
+      let favorite = true;
+      if (this.favoriteButtonColor[imageId]) {
+        favorite = false;
+      }
+      fetch("/api/focus/favorite", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_id: imageId,
+          favorite: favorite,
+        }),
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          if (result.success) {
+            if (result.favorited) {
+              this.favoriteButtonColor[imageId] = "orange-lighten-1";
+            } else {
+              this.favoriteButtonColor[imageId] = "";
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Post favorite error:", error);
+        });
+    },
+    shareOrUnshare(imageId) {
+      let share = true;
+      if (this.shareButtonColor[imageId]) {
+        share = false;
+      }
+      fetch("/api/focus/share", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_id: imageId,
+          share: share,
+        }),
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          if (result.success) {
+            if (result.shared) {
+              this.shareButtonColor[imageId] = "blue-lighten-1";
+            } else {
+              this.shareButtonColor[imageId] = "";
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Post share error:", error);
+        });
+    },
+    updateImagePromptDefault(index, styleType) {
+      this.imagePrompts[index].params.stopAt =
+        this.imagePromptDefaultValues[styleType].stop;
+      this.imagePrompts[index].params.weight =
+        this.imagePromptDefaultValues[styleType].weight;
+    },
+    updateDefaultOptions(preset, callback = null) {
+      this.loadingPreset = true;
+      if (this.selectedPreset === preset) {
+        this.selectingPreset = false;
+        this.loadingPreset = false;
+        return;
+      }
+      fetch(
+        "/api/focus/default_options?" +
+          new URLSearchParams({
+            preset: preset,
+          }),
+        {
+          method: "GET",
+        },
+      )
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((options) => {
+          this.defaultOptions = options;
+          this.hostname = options.hostname;
+          this.aspectRatios = options.aspect_ratios.options;
+          this.aspectRatio = options.aspect_ratios.default;
+          this.styles = options.styles.options.map((style) => {
+            return {
+              name: style.style_name,
+              image: style.style_preview,
+            };
+          });
+          this.selectedStyles = options.styles.default_list;
+          this.baseModels = options.base_models.options;
+          this.baseModel = options.base_models.default;
+          this.refiners = options.refiner_models.options;
+          this.refiner = options.refiner_models.default;
+          this.refinerSwitch = options.refiner_switch;
+          this.numLoras = options.loras.length;
+          this.uovMethods = options.uovs.options;
+          this.uovSelection = options.uovs.default;
+          this.ipTypes = options.ip_types.options;
+          this.numImagePrompts = options.num_image_prompts;
+          this.contentTypeSelection = options.content_types.default;
+          this.contentTypes = options.content_types.options;
+          this.imagePromptDefaultValues = options.ip_default_options;
+          this.selectedLoraModels = [];
+          this.selectedLoraWeights = [];
+          for (let i = 0; i < this.numLoras; i++) {
+            this.selectedLoraModels.push(options.loras[i].lora_name.default);
+            this.selectedLoraWeights.push(options.loras[i].lora_weight);
+            this.loraModels = options.loras[i].lora_name.options;
+          }
+          for (let i = 0; i < this.numImagePrompts; i++) {
+            this.imagePrompts.push({
+              params: {
+                stopAt:
+                  options.ip_default_options[options.ip_types.default].stop,
+                weight:
+                  options.ip_default_options[options.ip_types.default].weight,
+                controlType: options.ip_types.default,
+              },
+            });
+            this.imagePromptImages.push(null);
+          }
+          this.selectedPreset = preset;
+          this.availablePresets = options.presets.options;
+          for (const presetName of this.availablePresets) {
+            if (!(presetName in this.presetName)) {
+              this.presetName[presetName] = presetName;
+            }
+            if (!(presetName in this.presetColor)) {
+              this.presetColor[presetName] = "grey-darken-1";
+            }
+          }
+          this.guidanceScale = options.cfg_scale;
+          this.imageSharpness = options.sample_sharpness;
+          this.selectedSampler = options.sampler.default;
+          this.availableSamplers = options.sampler.options;
+          this.selectedScheduler = options.scheduler.default;
+          this.availableSchedulers = options.scheduler.options;
+          if (options.prompt) {
+            this.prompt = options.prompt;
+          }
+          this.negativePrompt = options.negative_prompt;
+
+          this.nonLCMArguments = {};
+          this.performanceOptions = options.performances.options;
+          this.performance = options.performances.default;
+          this.forcedSteps = options.steps;
+
+          this.selectingPreset = false;
+          this.loadingPreset = false;
+          if (typeof callback === "function") {
+            callback(options);
+          }
+        })
+        .catch((error) => {
+          console.error("Get default value error:", error);
+          this.selectingPreset = false;
+          this.loadingPreset = false;
+          if (!this.selectedPreset) {
+            this.selectedPreset = "default";
+          }
+        });
+    },
+    getConsumeText(consume, image_number = null) {
+      const inference = consume.inference;
+      const discount = consume.discount;
+
+      const real_inference =
+        discount === 0 ? inference : Math.ceil(inference * (1 - discount));
+      const credit_unit = `credit${real_inference === 1 ? "" : "s"}`;
+
+      let result =
+        discount === 0
+          ? `Estimated ${real_inference} ${credit_unit}`
+          : `Estimated <del>${inference}</del> ${real_inference} ${credit_unit}`;
+
+      if (image_number) {
+        const image_unit = `image${image_number === 1 ? "" : "s"}`;
+        result = `${result} for ${image_number} ${image_unit}`;
+      }
+      return `(${result})`;
+    },
+    getShapeCeil(width, height) {
+      return Math.ceil(Math.sqrt(width * height) / 64.0) * 64.0;
+    },
+    getTargetResolution() {
+      const [width, height] = this.aspectRatio
+        .replace("×", " ")
+        .split(" ")
+        .slice(0, 2);
+      return [Number(width), Number(height)];
+    },
+    getImageResolution(src) {
+      return new Promise((resolve, _) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+          resolve([img.naturalWidth, img.naturalHeight]);
+        };
+      });
+    },
+    getStepsCoefficient() {
+      const mapping = {
+        Speed: 2,
+        Quality: 4,
+        "Extreme Speed": 1,
+        Turbo: 1,
+      };
+      return mapping[this.performance];
+    },
+    async requestCreditsConsumption(args) {
+      const body = {
+        ...args,
+        link_params: {},
+        mutipliers: {},
+        link_mutipliers: {},
+      };
+
+      const response = await fetch("/api/tasks/credits_consumption", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ functions: args }),
+      });
+      if (response.status != 200) {
+        return { inference: "-", discount: 0 };
+      }
+      const result = await response.json();
+      return {
+        inference: result.inference,
+        discount: result.discount ? result.discount : 0,
+      };
+    },
+    getUserOrderInformation() {
+      fetch("/api/order_info", {
+        method: "GET",
+        credentials: "include",
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((data) => {
+          this.userOrderInformation = data;
+        })
+        .catch((error) => {
+          console.error("getUserOrderInformation error:", error);
+        });
+    },
+    async getImageOptionsConsumeArgs() {
+      if (!this.showImageOptions) {
+        return;
+      }
+      if (this.imageOptionTab === "uov") {
+        if (!this.uovImageFile) {
+          return;
+        }
+        let [width, height] = await this.getImageResolution(this.uovImageFile);
+        if (this.uovSelection.includes("Vary")) {
+          const shapeCeil = this.getShapeCeil(width, height);
+          if (shapeCeil <= 1024) {
+            width = 1024;
+            height = 1024;
+          } else if (shapeCeil >= 2048) {
+            width = 2048;
+            height = 2048;
+          }
+          return {
+            "fooocus.vary": {
+              params: {
+                width: width,
+                height: height,
+                steps_coefficient: this.getStepsCoefficient(),
+                image_number: this.imageNumber,
+              },
+            },
+          };
+        }
+        if (this.uovSelection.includes("Upscale")) {
+          const scale = this.uovSelection.includes("1.5") ? 1.5 : 2.0;
+          width *= scale;
+          height *= scale;
+
+          let is_fast = this.uovSelection.includes("Fast");
+
+          let shapeCeil = this.getShapeCeil(width, height);
+          if (shapeCeil <= 1024) {
+            width = 1024;
+            height = 1024;
+          } else if (shapeCeil > 2800) {
+            is_fast = true;
+          }
+          let steps_coefficient = 0;
+          let image_number = 1;
+          if (!is_fast) {
+            steps_coefficient = this.getStepsCoefficient();
+            image_number = this.imageNumber;
+          }
+
+          return {
+            "fooocus.upscale": {
+              params: {
+                width: width,
+                height: height,
+                steps_coefficient: steps_coefficient,
+                image_number: image_number,
+              },
+            },
+          };
+        }
+        return;
+      }
+      if (this.imageOptionTab === "inpaint") {
+        if (!this.inpaintImageUploader) {
+          return;
+        }
+        let [width, height] = await this.getImageResolution(
+          this.inpaintImageUploader,
+        );
+
+        if (this.inpaintSelection === "Inpaint or Outpaint (default)") {
+          let scale = 0;
+          if (this.outpaintDirection.includes("Top")) {
+            scale += 0.3;
+          }
+          if (this.outpaintDirection.includes("Bottom")) {
+            scale += 0.3;
+          }
+          height += height * scale;
+
+          scale = 0;
+          if (this.outpaintDirection.includes("Left")) {
+            scale += 0.3;
+          }
+          if (this.outpaintDirection.includes("Right")) {
+            scale += 0.3;
+          }
+          width += height * scale;
+        }
+        return {
+          "fooocus.inpaint": {
+            params: {
+              width: Math.floor(width),
+              height: Math.floor(height),
+              steps_coefficient: this.getStepsCoefficient(),
+              image_number: this.imageNumber,
+            },
+          },
+        };
+      }
+      if (this.imageOptionTab === "ip") {
+        let ip_ctrls = 0;
+        for (const imagePromptUploader of this.imagePromptImages) {
+          if (imagePromptUploader) {
+            ip_ctrls += 1;
+          }
+        }
+        const [width, height] = this.getTargetResolution();
+        return {
+          fooocus: {
+            params: {
+              width: width,
+              height: height,
+              steps_coefficient: this.getStepsCoefficient(),
+              ip_ctrls: ip_ctrls,
+              image_number: this.imageNumber,
+            },
+          },
+        };
+      }
+      return;
+    },
+    async updateEstimateConsume(_) {
+      let args = await this.getImageOptionsConsumeArgs();
+      if (!args) {
+        const [width, height] = this.getTargetResolution();
+        args = {
+          fooocus: {
+            params: {
+              width: width,
+              height: height,
+              steps_coefficient: this.getStepsCoefficient(),
+              ip_ctrls: 0,
+              image_number: this.imageNumber,
+            },
+          },
+        };
+      }
+      if (JSON.stringify(args) === JSON.stringify(this.estimateConsume.args)) {
+        return;
+      }
+      this.estimateConsume.args = args;
+      if (this.estimateConsume.timeoutId !== null) {
+        clearTimeout(this.estimateConsume.timeoutId);
+      }
+      this.estimateConsume.timeoutId = setTimeout(async () => {
+        let request_args = this.estimateConsume.args;
+        this.estimateConsume.imageNumber =
+          Object.values(request_args)[0].params.image_number;
+        const result = await this.requestCreditsConsumption(request_args);
+        this.estimateConsume.inference = result.inference;
+        this.estimateConsume.discount = result.discount;
+        this.estimateConsume.timeoutId = null;
+      }, 1000);
+    },
+    async updateBlipEstimateConsume(_) {
+      if (!this.showImageOptions) {
+        this.estimateBlipConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      if (this.imageOptionTab != "describe") {
+        this.estimateBlipConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      if (!this.describeImageUploader) {
+        this.estimateBlipConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      let [width, height] = await this.getImageResolution(
+        this.describeImageUploader,
+      );
+      args = {
+        "fooocus.describe.blip": {
+          params: {
+            width: width,
+            height: height,
+          },
+        },
+      };
+      const result = await this.requestCreditsConsumption(request_args);
+      this.estimateBlipConsume.inference = result.inference;
+      this.estimateBlipConsume.discount = result.discount;
+    },
+    openSubscriptionPage() {
+      addUpgradeGtagEvent(this.popup.URL, this.popup.itemName);
+    },
+    updateLCMOptions() {
+      if (this.isLCMMode) {
+        this.nonLCMArguments = {
+          refiner: this.refiner,
+          selectedSampler: this.selectedSampler,
+          selectedScheduler: this.selectedScheduler,
+          imageSharpness: this.imageSharpness,
+          guidanceScale: this.guidanceScale,
+        };
+        this.refiner = "None";
+        this.selectedSampler = "lcm";
+        this.selectedScheduler = "lcm";
+        this.imageSharpness = 0;
+        this.guidanceScale = 1;
+      } else if (Object.keys(this.nonLCMArguments).length != 0) {
+        this.refiner = this.nonLCMArguments.refiner;
+        this.selectedSampler = this.nonLCMArguments.selectedSampler;
+        this.selectedScheduler = this.nonLCMArguments.selectedScheduler;
+        this.imageSharpness = this.nonLCMArguments.imageSharpness;
+        this.guidanceScale = this.nonLCMArguments.guidanceScale;
+        this.nonLCMArguments = {};
+      }
+    },
+  },
+  computed: {
+    isLCMMode() {
+      return this.performance === "Extreme Speed";
+    },
+    performance: {
+      get() {
+        return this._performance;
+      },
+      set(value) {
+        this._performance = value;
+        this.updateLCMOptions();
+      },
+    },
+  },
+  watch: {
+    imageOptionTab(newTab, oldTab) {
+      if (oldTab === "inpaint" && newTab !== "inpaint") {
+        this.clearEdit();
+        this.inpaintImageFiles = [];
+      }
+    },
+    async userOrderInformation(newInfo, oldInfo) {
+      if (newInfo) {
+        await reportIdentity(newInfo.user_id, newInfo.email);
+      }
+    },
+  },
+  created() {
+    for (let name of [
+      "showImageOptions",
+      "imageOptionTab",
+      "uovImageFile",
+      "uovSelection",
+      "performance",
+      "inpaintImageUploader",
+      "inpaintSelection",
+      "outpaintDirection",
+      "aspectRatio",
+      "imageNumber",
+    ]) {
+      this.$watch(name, this.updateEstimateConsume);
+    }
+    this.$watch("imagePromptImages", this.updateEstimateConsume, {
+      deep: true,
+    });
+
+    for (let name of [
+      "showImageOptions",
+      "imageOptionTab",
+      "describeImageUploader",
+    ]) {
+      this.$watch(name, this.updateBlipEstimateConsume);
+    }
+  },
+  async mounted() {
+    this.updateDefaultOptions("default", () => {
+      this.initializeFilerobot();
+      this.startIntroJS();
+    });
+    this.getUserOrderInformation();
+  },
+})
+  .use(vuetify)
+  .mount("#app");
