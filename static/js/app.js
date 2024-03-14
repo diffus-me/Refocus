@@ -30,6 +30,7 @@ createApp({
       forcedSteps: null,
       aspectRatio: "1:1",
       aspectRatios: [],
+      aspectRatiosNumber: [],
       imageNumber: 2,
       negativePrompt: "",
       isRandom: true,
@@ -143,6 +144,16 @@ createApp({
       estimateBlipConsume: {
         inference: "-",
         discount: 0,
+      },
+      estimateGptVisionConsume: {
+        inference: "-",
+        discount: 0,
+      },
+      gptVisionTask: {
+        task_id: null,
+        queueLength: 0,
+        queuePosition: 0,
+        result: null,
       },
       popup: {
         isOpen: false,
@@ -643,6 +654,23 @@ createApp({
           console.error("Post skip error:", error);
         });
     },
+    findClosestItem(arr, attributeName, benchmark) {
+      if (!arr.length) {
+        throw new Error("Array is empty");
+      }
+
+      let closest = arr[0];
+      let smallestDiff = Math.abs(arr[0][attributeName] - benchmark);
+
+      for (let i = 1; i < arr.length; i++) {
+        const diff = Math.abs(arr[i][attributeName] - benchmark);
+        if (diff < smallestDiff) {
+          smallestDiff = diff;
+          closest = arr[i];
+        }
+      }
+      return closest;
+    },
     describeImageLocal() {
       this.describeImageLoading = true;
       fetch("/api/focus/describe/local", {
@@ -671,6 +699,117 @@ createApp({
           if (!result.image_id) {
             // TODO: show error message
           }
+        })
+        .catch((error) => {
+          this.describeImageLoading = false;
+          console.error("Post describe error:", error);
+        });
+    },
+    getGptVisionTaskStatus(task_id, retries = 5, backoff = 300) {
+      if (retries <= 0) {
+        this.describeImageLoading = false;
+        // TODO: show error message
+        console.warn("Get gpt vision task progress retries exhausted");
+        return;
+      }
+      fetch(
+        "/api/v3/gpt/vision/prompt?" +
+          new URLSearchParams({
+            task_id: task_id,
+          }),
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      )
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then(async (result) => {
+          if (result.status === "failed") {
+            this.describeImageLoading = false;
+            // TODO: show error message
+            return;
+          } else if (result.status === "finished") {
+            this.describeImageLoading = false;
+            this.prompt = result.prompt;
+            this.gptVisionTask.result = result.prompt;
+            let [width, height] = await this.getImageResolution(
+              this.describeImageUploader,
+            );
+            const ratio = width / height;
+            const ratioItem = this.findClosestItem(this.aspectRatiosNumber, "ratio", ratio);
+            this.aspectRatio = ratioItem.text;
+          } else if (result.status === "started") {
+            setTimeout(() => {
+              this.getGptVisionTaskStatus(task_id);
+            }, 1000);
+          } else if (result.status === "queued") {
+            this.gptVisionTask.queueLength = result.queue_status.queueLength;
+            this.gptVisionTask.queuePosition = result.queue_status.position;
+            setTimeout(() => {
+              this.getGptVisionTaskStatus(task_id);
+            }, 1000);
+          } else if (result.status === "unknown") {
+            setTimeout(() => {
+              this.getGptVisionTaskStatus(task_id, retries - 1);
+            }, 1000);
+          } else {
+            this.describeImageLoading = false;
+            // TODO: show error message
+          }
+          if (result.status !== "queued") {
+            this.gptVisionTask.queueLength = 0;
+            this.gptVisionTask.queuePosition = 0;
+          }
+        })
+        .catch((error) => {
+          if (
+            retries > 0 &&
+            (error.name === "AbortError" || error.name === "NetworkError")
+          ) {
+            console.warn(`Retrying (${retries} more attempts)`, error);
+            setTimeout(
+              () =>
+                this.getGptVisionTaskStatus(task_id, retries - 1, backoff * 2),
+              backoff,
+            );
+          } else {
+            this.describeImageLoading = false;
+            console.error("Get gpt vision task progress error:", error);
+          }
+        });
+    },
+    describeImageGptVision() {
+      this.describeImageLoading = true;
+      fetch("/api/v3/gpt/vision/prompt", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: {
+            encoded_image: this.describeImageUploader,
+          },
+        }),
+      })
+        .then((response) => {
+          if (response.status === 200) {
+            return response.json();
+          }
+          return Promise.reject(response);
+        })
+        .then((result) => {
+          this.gptVisionTask.task_id = result.data.task_id;
+          setTimeout(() => {
+            this.getGptVisionTaskStatus(result.data.task_id);
+          }, 1000);
         })
         .catch((error) => {
           this.describeImageLoading = false;
@@ -825,6 +964,24 @@ createApp({
           this.hostname = options.hostname;
           this.aspectRatios = options.aspect_ratios.options;
           this.aspectRatio = options.aspect_ratios.default;
+          this.aspectRatiosNumber = options.aspect_ratios.options.map(
+            (item) => {
+              const regex = /(\d+)×(\d+) \((\d+):(\d+)\)/;
+              const match = item.match(regex);
+
+              if (match) {
+                const width = parseInt(match[1], 10);
+                const height = parseInt(match[2], 10);
+                const ratio = match[3] / match[4];
+
+                return { width, height, ratio, text: item };
+              } else {
+                throw new Error(
+                  "Input string does not match the expected format",
+                );
+              }
+            },
+          );
           this.styles = options.styles.options.map((style) => {
             return {
               name: style.style_name,
@@ -880,9 +1037,9 @@ createApp({
           this.availableSamplers = options.sampler.options;
           this.selectedScheduler = options.scheduler.default;
           this.availableSchedulers = options.scheduler.options;
-          if (options.prompt) {
-            this.prompt = options.prompt;
-          }
+          //if (options.prompt) {
+          //  this.prompt = options.prompt;
+          //}
           this.negativePrompt = options.negative_prompt;
 
           this.nonLCMArguments = {};
@@ -1156,7 +1313,7 @@ createApp({
         this.estimateBlipConsume = { inference: "-", discount: 0 };
         return;
       }
-      if (this.imageOptionTab != "describe") {
+      if (this.imageOptionTab != "desc") {
         this.estimateBlipConsume = { inference: "-", discount: 0 };
         return;
       }
@@ -1178,6 +1335,48 @@ createApp({
       const result = await this.requestCreditsConsumption(request_args);
       this.estimateBlipConsume.inference = result.inference;
       this.estimateBlipConsume.discount = result.discount;
+    },
+    async requestGptVisionCreditsConsumption(args) {
+      const response = await fetch("/api/v3/gpt/vision/prompt/credits", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(args),
+      });
+      if (response.status != 200) {
+        return { inference: "-", discount: 0 };
+      }
+      const result = await response.json();
+      return {
+        inference: result.inference,
+        discount: result.discount ? result.discount : 0,
+      };
+    },
+    async updateGptVisionEstimateConsume(_) {
+      if (!this.showImageOptions) {
+        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      if (this.imageOptionTab != "desc") {
+        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      if (!this.describeImageUploader) {
+        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
+        return;
+      }
+      let [width, height] = await this.getImageResolution(
+        this.describeImageUploader,
+      );
+      const args = {
+        width: width,
+        height: height,
+      };
+      const result = await this.requestGptVisionCreditsConsumption(args);
+      this.estimateGptVisionConsume.inference = result.inference;
+      this.estimateGptVisionConsume.discount = result.discount;
     },
     openSubscriptionPage() {
       addUpgradeGtagEvent(this.popup.URL, this.popup.itemName);
@@ -1257,7 +1456,7 @@ createApp({
       "imageOptionTab",
       "describeImageUploader",
     ]) {
-      this.$watch(name, this.updateBlipEstimateConsume);
+      this.$watch(name, this.updateGptVisionEstimateConsume);
     }
   },
   async mounted() {
