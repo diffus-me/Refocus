@@ -152,7 +152,7 @@
                   <v-tab value="uov">Upscale or Variation</v-tab>
                   <v-tab value="ip">Image Prompt</v-tab>
                   <v-tab value="inpaint">Inpaint or Outpaint</v-tab>
-                  <v-tab value="desc" v-if="false">Describe</v-tab>
+                  <v-tab value="desc">Describe</v-tab>
                 </v-tabs>
                 <v-window v-model="imageOptionTab">
                   <v-window-item value="uov" eager>
@@ -420,7 +420,16 @@
                         sm="12"
                         cols="12"
                       >
-                        <div class="ma-2">
+                        <div class="ma-4">
+                          <v-alert
+                              density="compact"
+                              text="If you use GPT vision to generate prompt for your image, you need to be mindful of the content you are uploading. Anything violates OpenAI policy cannot be generated. And we cannot refund your credits."
+                              type="warning"
+                              variant="tonal"
+                              closable
+                            ></v-alert>
+                        </div>
+                        <div class="ma-2" v-if="false">
                           <v-radio-group v-model="contentTypeSelection" label="Content Type" inline>
                             <v-radio
                               v-for="(name, index) in contentTypes"
@@ -429,7 +438,7 @@
                             </v-radio>
                           </v-radio-group>
                         </div>
-                        <div class="ma-4">
+                        <div class="ma-4" v-if="false">
                           <v-btn
                             class="describe-image-button"
                             block
@@ -445,13 +454,20 @@
                             </span>
                           </v-btn>
                         </div>
-                        <div class="ma-4" v-if="false">
+                        <div class="ma-4">
                           <v-btn
                             class="describe-image-button"
                             block
                             color="#5a3cff"
                             height="48"
-                          >Describe into Prompt (GPT-4)</v-btn>
+                            :loading="describeImageLoading"
+                            @click="describeImageGptVision"
+                          >
+                            <span style="white-space: normal;">
+                              Describe into Prompt (GPT-4 Vision)<span v-show="gptVisionTask.queueLength">([[ gptVisionTask.position ]]/[[ gptVisionTask.length ]])</span><br/>
+                              <span class="text-caption" v-html="getConsumeText(this.estimateGptVisionConsume)">
+                            </span>
+                          </v-btn>
                         </div>
                       </v-col>
                     </v-row>
