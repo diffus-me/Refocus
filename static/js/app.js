@@ -1,6 +1,17 @@
 const { createApp } = Vue;
 const { createVuetify } = Vuetify;
 
+let notifierGlobalOptions = {
+  position: "bottom-right",
+  icons: {enabled: false},
+  minDurations: {
+    async: 30,
+    "async-block": 30,
+  },
+};
+
+var notifier = new AWN(notifierGlobalOptions);
+
 const defaultTheme = {
   dark: true,
   colors: {
@@ -708,7 +719,7 @@ createApp({
     getGptVisionTaskStatus(task_id, retries = 5, backoff = 300) {
       if (retries <= 0) {
         this.describeImageLoading = false;
-        // TODO: show error message
+        notifier.alert("Could not get GPT vision task progress. Please try again later.");
         console.warn("Get gpt vision task progress retries exhausted");
         return;
       }
@@ -733,18 +744,22 @@ createApp({
         .then(async (result) => {
           if (result.status === "failed") {
             this.describeImageLoading = false;
-            // TODO: show error message
+            notifier.warning("Failed to generate prompt uisng GPT vision.");
             return;
           } else if (result.status === "finished") {
             this.describeImageLoading = false;
-            this.prompt = result.prompt;
-            this.gptVisionTask.result = result.prompt;
-            let [width, height] = await this.getImageResolution(
-              this.describeImageUploader,
-            );
-            const ratio = width / height;
-            const ratioItem = this.findClosestItem(this.aspectRatiosNumber, "ratio", ratio);
-            this.aspectRatio = ratioItem.text;
+            if (result.nsfw) {
+              notifier.warning("Image violates GPT vision policy. We could not proceed with the request nor refund your credits.");
+            } else {
+              this.prompt = result.prompt;
+              this.gptVisionTask.result = result.prompt;
+              let [width, height] = await this.getImageResolution(
+                this.describeImageUploader,
+              );
+              const ratio = width / height;
+              const ratioItem = this.findClosestItem(this.aspectRatiosNumber, "ratio", ratio);
+              this.aspectRatio = ratioItem.text;
+            }
           } else if (result.status === "started") {
             setTimeout(() => {
               this.getGptVisionTaskStatus(task_id);
@@ -761,7 +776,7 @@ createApp({
             }, 1000);
           } else {
             this.describeImageLoading = false;
-            // TODO: show error message
+            notifier.alert("Could not get GPT vision task progress. Please try again later.");
           }
           if (result.status !== "queued") {
             this.gptVisionTask.queueLength = 0;
