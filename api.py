@@ -1,7 +1,9 @@
 import asyncio
 import base64
 import copy
+import functools
 import hashlib
+import inspect
 import imghdr
 import io
 import json
@@ -12,9 +14,9 @@ import socket
 import time
 import uuid
 from datetime import datetime, timezone
-from functools import cache
 from typing import Annotated, Callable, Any
 from urllib.parse import urlparse
+
 from modules import script_callbacks
 
 import aiofiles
@@ -23,6 +25,7 @@ import aiohttp
 import numpy as np
 from fastapi import (
     FastAPI,
+    Depends,
     File,
     Header,
     HTTPException,
@@ -31,6 +34,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     WebSocketException,
+    Response,
     status,
 )
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -71,6 +75,9 @@ class Settings(BaseSettings):
     models_dir: str = "./"
     preset_dir: str = "./presets"
     models_db_path: str = "./models/models_db.json"
+
+    # reverse proxy Settings
+    forward_endpoint: str = ""
 
     class Config:
         env_file = ".env"
@@ -839,10 +846,71 @@ async def list_presets(path: str) -> list[str]:
     return []
 
 
-@cache
+@functools.cache
 def get_preset(preset: str) -> dict[str, Any]:
     config_dict = copy.deepcopy(modules.config.config_dict)
     return read_preset_and_update_config(preset, config_dict, settings.preset_dir)
+
+
+static_resource_cache = {}
+
+def cache_on_params(*params: str):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            global static_resource_cache
+            bound_args = inspect.signature(func).bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            key = tuple(bound_args.arguments.get(param) for param in params)
+
+            if key in static_resource_cache:
+                return static_resource_cache[key]
+
+            result = await func(*args, **kwargs)
+            static_resource_cache[key] = result
+            return result
+
+        return wrapper
+    return decorator
+
+
+async def get_forward_http_client(request: Request):
+    if not hasattr(request.app.state, 'forward_http_client'):
+        if not settings.forward_endpoint:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find path.")
+        request.app.state.forward_http_client = aiohttp.ClientSession(settings.forward_endpoint)
+
+    try:
+        yield request.app.state.forward_http_client
+    finally:
+        pass  # We don't close the session here, it should be closed when the app stops
+
+
+async def shutdown_forward_http_client(app: FastAPI):
+    if hasattr(app.state, 'forward_http_client'):
+        await app.state.forward_http_client.close()
+
+
+async def forward_request(http_client: aiohttp.ClientSession, request: Request, path: str) -> Response:
+    async with http_client.request(
+        method=request.method,
+        url=path,
+        headers=dict(request.headers),
+        data=await request.body(),
+        params=dict(request.query_params),
+        cookies=request.cookies,
+    ) as response:
+        data = await response.read()
+        headers = {
+            key: value for key, value in response.headers.items()
+            if key.lower() not in ('content-length', 'content-encoding', 'transfer-encoding')
+        }
+        return Response(
+            content=data,
+            status_code=response.status,
+            headers=headers,
+            media_type=response.content_type
+        )
 
 
 def create_api(
@@ -969,12 +1037,16 @@ def create_api(
             else:
                 data = await websocket.receive_text()
                 generation_option = GenerationOption(**json.loads(data))
+                task_id = generation_option.task_id
                 advanced_parameters.set_all_advanced_parameters(
                     *convert_advanced_options_to_list(generation_option.advanced_options)
                 )
                 request_headers = dict(websocket.headers)
                 request_headers["x-session-hash"] = str(uuid.uuid4())
                 request_headers["x-task-id"] = generation_option.task_id
+                if user_id == "local":
+                    request_headers["x-deduct-credits"] = "false"
+                    request_headers["user-tier"] = "free"
                 task_id = generation_option.task_id
                 args = await prepare_args_for_generate(generation_option, user_id)
                 function_name, decoded_params = _get_consume_args(generation_option)
@@ -1026,7 +1098,7 @@ def create_api(
             logger.exception(f'un-handled prediction exception: {e.__str__()}')
             await websocket.send_json(
                 GenerationProgress(
-                    task_id=task_id,
+                    task_id=task_id if task_id else "unknown",
                     status=f"failed",
                     message=str(e),
                     progress=100,
@@ -1034,7 +1106,7 @@ def create_api(
             )
             raise
         finally:
-            script_callbacks.after_task_callback(task_id)
+            script_callbacks.after_task_callback(task_id if task_id else "unknown")
             await websocket.close()
 
     @app.post("/api/focus/stop", response_class=JSONResponse)
@@ -1256,23 +1328,94 @@ def create_api(
             return JSONResponse(status_code=500, content={"message": str(e)})
 
     @app.get("/ui", response_class=HTMLResponse)
-    async def vue_ui(request: Request):
+    async def vue_ui(request: Request, user_id: Annotated[str | None, Header()] = None, user_tier: Annotated[str | None, Header()] = None):
         global database_created
         if not database_created:
             await create_tables()
             database_created = True
 
+        template_args = {
+            "request": request,
+            "js_version": time.time(),
+        }
+        if user_id:
+            template_args["base64_encoded_user_id"] = base64.b64encode(
+                user_id.encode('utf-8')
+            ).decode('utf-8')
+
+        if user_tier:
+            template_args["user_tier"] = user_tier
+
         return templates.TemplateResponse(
             "ui.html",
-            {
-                "request": request,
-                "base64_encoded_user_id": base64.b64encode(
-                    request.headers["user-id"].encode('utf-8')
-                ).decode('utf-8'),
-                "user_tier": request.headers["user-tier"],
-                "js_version": time.time(),
-            }
+            template_args,
         )
+
+    @cache_on_params("endpoint", "path", "method")
+    async def get_static_resources(
+        endpoint: str, path: str, method: str, cookies: dict[str, str], params: dict[str, str], headers: dict[str, str], body: bytes
+        ) -> dict[str, Any]:
+            async with aiohttp.ClientSession(endpoint) as http_client:
+                async with http_client.request(
+                    method=method,
+                    url=path,
+                    headers=headers,
+                    data=body,
+                    params=params,
+                    cookies=cookies,
+                ) as response:
+                    if response.status < 200 or response.status >= 300:
+                        raise HTTPException(status_code=response.status, detail=response.reason)
+                    data = await response.read()
+                    headers = {
+                        key: value for key, value in response.headers.items()
+                        if key.lower() not in ('content-length', 'content-encoding', 'transfer-encoding')
+                    }
+                    return {
+                        "content": data,
+                        "status_code": response.status,
+                        "headers": headers,
+                        "media_type": response.content_type
+                    }
+
+    if settings.forward_endpoint:
+        @app.api_route('/public/{path:path}', methods=['GET'])
+        async def get_public_resource(request: Request, path: str):
+            response = await get_static_resources(
+                settings.forward_endpoint,
+                f"/public/{path}",
+                request.method,
+                request.cookies,
+                dict(request.query_params),
+                dict(request.headers),
+                await request.body(),
+            )
+            return Response(**response)
+
+        @app.api_route('/components/{path:path}', methods=['GET'])
+        async def get_components_resource(request: Request, path: str):
+            response = await get_static_resources(
+                settings.forward_endpoint,
+                f"/components/{path}",
+                request.method,
+                request.cookies,
+                dict(request.query_params),
+                dict(request.headers),
+                await request.body(),
+            )
+            return Response(**response)
+
+        @app.api_route('/api/analytics/{path:path}', methods=['GET', 'POST'])
+        async def forward_analytics_events(
+            request: Request, path: str, http_client: aiohttp.ClientSession = Depends(get_forward_http_client)
+        ):
+            return await forward_request(http_client, request, f"/api/analytics/{path}")
+
+        @app.api_route('/api/tasks/credits_consumption', methods=['POST'])
+        async def forward_credits_consumption(
+            request: Request, http_client: aiohttp.ClientSession = Depends(get_forward_http_client)
+        ):
+            return await forward_request(http_client, request, "/api/tasks/credits_consumption")
 
     return app
 

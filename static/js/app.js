@@ -1163,8 +1163,9 @@ createApp({
         .then((data) => {
           this.userOrderInformation = data;
         })
-        .catch((error) => {
-          console.error("getUserOrderInformation error:", error);
+        .catch(async (error) => {
+          console.warn("getUserOrderInformation error:", error);
+          await reportIdentity(null, null);
         });
     },
     async getImageOptionsConsumeArgs() {

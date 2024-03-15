@@ -19,7 +19,18 @@
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-6SKEYMGQ07"></script>
     <script type="text/javascript" src="/public/js/analytics/init.js?version={{ js_version }}"></script>
     <script>
-      configGtag("{{base64_encoded_user_id}}", {user_tier: "{{user_tier}}"});
+      configGtag(
+        {% if base64_encoded_user_id %}
+          "{{base64_encoded_user_id}}",
+        {% else %}
+          null,
+        {% endif %}
+        {% if user_tier %}
+          {user_tier: "{{user_tier}}"}
+        {% else %}
+          null
+        {% endif %}
+      );
     </script>
     <script type="text/javascript" src="/public/js/analytics/turn.js?version={{ js_version }}"></script>
     <script type="text/javascript" src="/components/js/notification/index.var.js"></script>

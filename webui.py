@@ -30,7 +30,7 @@ from modules.auth import auth_enabled, check_auth
 from modules import script_callbacks
 
 from fastapi import FastAPI
-from api import settings, Status, QueuingStatus, Progress, create_api
+from api import settings, Status, QueuingStatus, Progress, create_api, shutdown_forward_http_client
 
 import logging.config
 
@@ -973,6 +973,7 @@ async def block_thread(app: FastAPI):
         logger.info("Keyboard interruption in main thread... closing server.")
         if shared.gradio_root:
             shared.gradio_root.close()
+        await shutdown_forward_http_client(app)
     finally:
         script_callbacks.app_stopped_callback()
 
