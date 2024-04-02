@@ -986,6 +986,7 @@ def create_api(
                     is_intermediate=False,
                 ) as task_logger:
                     result_dict = {}
+                    result_images = []
                     async with system_monitor.monitor_call_context(
                         request_headers=request_headers,
                         api_name=function_name,
@@ -1004,10 +1005,11 @@ def create_api(
                             generate_progress = await extract_progress(progress, is_url, user_id, start_time)
                             result_dict = generate_progress.dict()
                             await websocket.send_json(result_dict)
-                        step_logger({}, result_dict.get('status', 'failed') == 'failed')
+                            result_images = progress.status.image_filepaths
+                        step_logger(result_images, result_dict.get('status', 'failed') == 'failed')
 
                     if result_dict:
-                        task_logger({}, result_dict.get('status', 'failed') == 'failed')
+                        task_logger(result_images, result_dict.get('status', 'failed') == 'failed')
                     else:
                         task_logger({}, True)
         except WebSocketDisconnect:
