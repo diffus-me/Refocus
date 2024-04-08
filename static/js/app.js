@@ -170,7 +170,7 @@ createApp({
         isOpen: false,
         itemName: "",
         message: "",
-        URL: "/user#/subscription?type=subscription",
+        URL: "/pricing_table",
       },
       userOrderInformation: null,
     };
