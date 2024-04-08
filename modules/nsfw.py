@@ -11,6 +11,7 @@ from PIL import Image, ImageFilter
 if TYPE_CHECKING:
     from modules.async_worker import AsyncTask
 
+_NSFW_ALLOWED_TIERS = {"basic", "plus", "pro", "api"}
 _OPEN_NSFW_MODEL: Model | None = None
 
 
@@ -35,7 +36,10 @@ def _get_nsfw_probability(image: Image.Image) -> float:
 
 
 def nsfw_blur(image: Image.Image, async_task: "AsyncTask", threshold=0.75) -> Image.Image | None:
-    if async_task.metadata is None or async_task.metadata["user-tier"].lower() != "free":
+    if (
+        async_task.metadata is not None
+        and async_task.metadata["user-tier"].lower() in _NSFW_ALLOWED_TIERS
+    ):
         return None
 
     print("[NSFW] Start detecting NSFW content")
