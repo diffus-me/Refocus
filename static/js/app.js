@@ -192,8 +192,9 @@ createApp({
         return;
       }
       this.popup.message = `Potential NSFW content was detected in the generated image, \
-                 upgrade to enable your private image storage. Or join our ${AFFILIATE_PROGRAM} \
-                 to earn cash or credits and use it to upgrade to <b>Basic</b> plan.`;
+                 upgrade to ${NSFW_ALLOWED_TIERS_MESSAGE} to enable your private image storage. \
+                 Or join our ${AFFILIATE_PROGRAM} \
+                 to earn cash or credits and use it to upgrade to a higher plan.`;
       this.popup.itemName = "refocus_nsfw_checker";
       this.popup.isOpen = true;
       addPopupGtagEvent(this.popup.URL, this.popup.itemName);
