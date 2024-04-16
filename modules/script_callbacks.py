@@ -26,6 +26,7 @@ ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])
 
 callback_map = dict(
     callbacks_app_started=[],
+    callbacks_app_ready=[],
     callbacks_app_stopped=[],
     callbacks_before_ui=[],
     callbacks_before_task=[],
@@ -62,6 +63,10 @@ def app_started_callback(demo: Optional[Blocks], app: FastAPI):
     invoke_callbacks('callbacks_app_started', demo, app)
 
 
+def app_ready_callback():
+    invoke_callbacks('callbacks_app_ready')
+
+
 def app_stopped_callback():
     invoke_callbacks('callbacks_app_stopped')
 
@@ -86,6 +91,11 @@ def on_app_started(callback):
     """register a function to be called when the webui started, the gradio `Block` component and
     fastapi `FastAPI` object are passed as the arguments"""
     add_callback(callback_map['callbacks_app_started'], callback)
+
+
+def on_app_ready(callback):
+    """register a function to be called when the app is ready to process tasks"""
+    add_callback(callback_map['callbacks_app_ready'], callback)
 
 
 def on_app_stopped(callback):

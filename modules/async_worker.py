@@ -864,6 +864,7 @@ def worker():
 
         return
 
+    script_callbacks.app_ready_callback()
     while True:
         time.sleep(0.01)
         if len(async_tasks) > 0:
