@@ -20,6 +20,13 @@ visited_keys = []
 
 overwrite_config(config_path)
 
+sd3_config = {
+    "baseModel": "sd3",
+    "baseModels": ["sd3", "sd3-turbo"],
+    "aspectRatio": "1:1",
+    "aspectRatios": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+}
+
 try:
     with open(os.path.abspath(f'./presets/default.json'), "r", encoding="utf-8") as json_file:
         config_dict.update(json.load(json_file))

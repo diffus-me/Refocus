@@ -10,6 +10,25 @@ let notifierGlobalOptions = {
   },
 };
 
+function _joinWords(words, conjunction = "and") {
+  const names = words.map((item) => `"${item}"`);
+  if (names.length == 1) {
+    return names[0];
+  }
+  const last_name = names.pop();
+  return `${names.join(", ")} ${conjunction} ${last_name}`;
+}
+
+function _joinTiers(tiers) {
+  const unique_tiers = [];
+  for (let tier of ["Basic", "Plus", "Pro", "Api"]) {
+    if (tiers.includes(tier)) {
+      unique_tiers.push(tier);
+    }
+  }
+  return _joinWords(unique_tiers, "or");
+}
+
 var notifier = new AWN(notifierGlobalOptions);
 
 const defaultTheme = {
@@ -89,7 +108,7 @@ createApp({
       uovMethods: [],
       imagePrompts: [],
       ipTypes: [],
-      numImagePrompts: 4,
+      _numImagePrompts: 4,
       imagePromptImages: [],
       imagePromptAdvancedPanel: "",
       imagePromptDefaultValues: {},
@@ -173,6 +192,22 @@ createApp({
         URL: "/pricing_table",
       },
       userOrderInformation: null,
+      sd3: {
+        enabled: false,
+        baseModel: "",
+        baseModels: [],
+        aspectRatio: "1:1",
+        aspectRatios: [],
+        strength: 0.5,
+        estimateConsume: {
+          inference: "-",
+          discount: 0,
+          imageNumber: 2,
+        },
+        background: "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
+        textColor: "#0c5536",
+        allowerTiers: ["Basic", "Plus", "Pro", "Api"],
+      }
     };
   },
   methods: {
@@ -477,6 +512,10 @@ createApp({
       return genParams;
     },
     startToGenerate(retry) {
+      if (this.sd3.enabled) {
+        this.generateSD3();
+        return;
+      }
       if (retry > 5) {
         this.generating = false;
         return;
@@ -1073,6 +1112,12 @@ createApp({
 
           this.selectingPreset = false;
           this.loadingPreset = false;
+
+          this.sd3.baseModel = options.sd3.base_models.default;
+          this.sd3.baseModels = options.sd3.base_models.options;
+          this.sd3.aspectRatio = options.sd3.aspect_ratios.default;
+          this.sd3.aspectRatios = options.sd3.aspect_ratios.options;
+
           if (typeof callback === "function") {
             callback(options);
           }
@@ -1158,8 +1203,8 @@ createApp({
         discount: result.discount ? result.discount : 0,
       };
     },
-    getUserOrderInformation() {
-      fetch("/api/order_info", {
+    async getUserOrderInformation() {
+      return fetch("/api/order_info", {
         method: "GET",
         credentials: "include",
       })
@@ -1360,6 +1405,15 @@ createApp({
       this.estimateBlipConsume.inference = result.inference;
       this.estimateBlipConsume.discount = result.discount;
     },
+    updateSD3EstimateConsume() {
+      const estimateConsume = { discount: 0.25, imageNumber: this.imageNumber };
+      if (this.sd3.baseModel === "sd3") {
+        estimateConsume.inference = 26 * this.imageNumber;
+      } else if (this.sd3.baseModel === "sd3-turbo") {
+        estimateConsume.inference = 16 * this.imageNumber;
+      }
+      this.sd3.estimateConsume = estimateConsume;
+    },
     async requestGptVisionCreditsConsumption(args) {
       const response = await fetch("/api/v3/gpt/vision/prompt/credits", {
         method: "POST",
@@ -1430,6 +1484,116 @@ createApp({
         this.nonLCMArguments = {};
       }
     },
+    async postSD3txt2img() {
+      const body = {
+        task_id: this.runningTaskId,
+        prompt: this.prompt,
+        aspect_ratio: this.sd3.aspectRatio,
+        negative_prompt: this.negativePrompt,
+        model: this.sd3.baseModel,
+        seed: this.isRandom ? 0 : this.randomSeed,
+        image_number: this.imageNumber,
+      }
+
+      const response = await fetch(
+        "/api/v3/internal/stability/sd3/txt2img",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      )
+      return await response.json();
+    },
+    async postSD3img2img() {
+      const body = {
+        task_id: this.runningTaskId,
+        prompt: this.prompt,
+        negative_prompt: this.negativePrompt,
+        model: this.sd3.baseModel,
+        seed: this.isRandom ? 0 : this.randomSeed,
+        image_number: this.imageNumber,
+        image: this.imagePromptImages[0],
+        strength: this.sd3.strength,
+      }
+
+      const response = await fetch(
+        "/api/v3/internal/stability/sd3/img2img",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      )
+      return await response.json();
+    },
+    async _checkSD3Permission(use_cache = true) {
+      if (!use_cache) {
+         await this.getUserOrderInformation();
+      }
+      const order_info = this.userOrderInformation;
+      if (!this.sd3.allowerTiers.includes(order_info.tier)) {
+          return { allowed: false, reason: "TIER_NOT_ALLOWED" }
+      }
+      if (order_info.trailing) {
+          return { allowed: false, reason: "TRIAL_NOT_ALLOWED" }
+      }
+      return { allowed: true }
+    },
+    async checkSD3Permission() {
+      let result = await this._checkSD3Permission()
+      if (!result.allowed) {
+        result = await this._checkSD3Permission(false)
+      }
+      if (result.allowed) {
+        return true;
+      }
+      if (result.reason === "TIER_NOT_ALLOWED") {
+        const allowed_tiers_message = _joinTiers(this.sd3.allowerTiers);
+        this.popup.message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
+                              Please upgrade to ${allowed_tiers_message} to use it.`,
+        this.popup.itemName = "refocus_sd3_tier_checker";
+        this.popup.isOpen = true;
+        addPopupGtagEvent(this.popup.URL, this.popup.itemName);
+
+        return false;
+      }
+      if (result.reason === "TRIAL_NOT_ALLOWED") {
+        this.popup.message = "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
+        this.popup.itemName = "refocus_sd3_trialing_checker";
+        this.popup.isOpen = true;
+        addPopupGtagEvent(this.popup.URL, this.popup.itemName);
+
+        return false;
+      }
+      return false;
+    },
+    async generateSD3() {
+      const is_allowed = await this.checkSD3Permission()
+      if (!is_allowed) {
+        return;
+      }
+
+      let response;
+
+      this.generating = true;
+      this.runningTaskMessage = "Generating...";
+      this.runningTaskResultImages = [];
+      this.runningTaskId = randomId();
+
+      try {
+        if (this.imagePromptImages[0]) {
+          response = await this.postSD3img2img();
+        } else {
+          response = await this.postSD3txt2img();
+        }
+        this.runningTaskResultImages = response.images.map((item) => ({src: item.image, id: 0}));
+      } finally {
+        this.generating = false;
+        this.pushHistory();
+        this.runningTaskId = "";
+      }
+    }
   },
   computed: {
     isLCMMode() {
@@ -1442,6 +1606,17 @@ createApp({
       set(value) {
         this._performance = value;
         this.updateLCMOptions();
+      },
+    },
+    numImagePrompts: {
+      get() {
+        if (this.sd3.enabled) {
+            return 1;
+        }
+        return this._numImagePrompts;
+      },
+      set(value) {
+        this._numImagePrompts = value;
       },
     },
   },
@@ -1483,6 +1658,13 @@ createApp({
       "describeImageUploader",
     ]) {
       this.$watch(name, this.updateGptVisionEstimateConsume);
+    }
+
+    for (let name of [
+      "sd3.baseModel",
+      "imageNumber",
+    ]) {
+      this.$watch(name, this.updateSD3EstimateConsume);
     }
   },
   async mounted() {
