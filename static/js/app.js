@@ -584,6 +584,14 @@ createApp({
           this.stopLoading = false;
           this.generating = false;
         }
+        if (status.status === "MonitorException.429") {
+          this.popup.message = `Your have reached the task concurrent limit of your current plan.`;
+          this.popup.itemName = "refocus_reach_concurrency_limit";
+          this.popup.isOpen = true;
+          addPopupGtagEvent(this.popup.URL, this.popup.itemName);
+          this.stopLoading = false;
+          this.generating = false;
+        }
       };
       socket.onerror = (error) => {
         // TODO: show error message
@@ -1396,6 +1404,8 @@ createApp({
     },
     openSubscriptionPage() {
       addUpgradeGtagEvent(this.popup.URL, this.popup.itemName);
+      window.open(this.popup.URL, "_blank");
+      this.popup.isOpen = false;
     },
     updateLCMOptions() {
       if (this.isLCMMode) {
