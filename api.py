@@ -1274,6 +1274,7 @@ def create_api(
                 ).decode('utf-8'),
                 "user_tier": request.headers["user-tier"],
                 "js_version": time.time(),
+                "app_version": os.path.getmtime("static/js/app.js"),
             }
         )
 
