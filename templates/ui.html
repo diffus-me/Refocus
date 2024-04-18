@@ -143,8 +143,16 @@
             ></v-btn>
           </v-col>
         </v-row>
-        <v-row class="d-flex pa-3">
-          <v-expansion-panels v-model="panelName" v-show="showImageOptions">
+        <v-row class="pa-3">
+          <v-btn-toggle v-model="sd3.enabled" mandatory divided :disabled="generating">
+            <v-btn color="#5a3cff" :value="false"> SDXL </v-btn>
+            <v-btn :value="true" :style="sd3.enabled ? sd3.background : ''" >
+                <span :style="sd3.enabled ? 'color: #0c5536;' : ''"> SD3 </span>
+            </v-btn>
+          </v-btn-toggle>
+        </v-row>
+        <v-row class="d-flex">
+          <v-expansion-panels v-model="panelName" v-show="showImageOptions" class="pa-3">
             <v-expansion-panel value="image_options">
               <v-expansion-panel-text eager>
                 <v-row
@@ -158,10 +166,10 @@
                   <v-icon :color="imageOptionsCloseButtonHover ? 'white' : 'grey'" icon="mdi-close"></v-icon>
                 </v-row>
                 <v-tabs vertical v-model="imageOptionTab">
-                  <v-tab value="uov">Upscale or Variation</v-tab>
+                  <v-tab v-if="!sd3.enabled" value="uov">Upscale or Variation</v-tab>
                   <v-tab value="ip">Image Prompt</v-tab>
-                  <v-tab value="inpaint">Inpaint or Outpaint</v-tab>
-                  <v-tab value="desc">Describe</v-tab>
+                  <v-tab v-if="!sd3.enabled" value="inpaint">Inpaint or Outpaint</v-tab>
+                  <v-tab v-if="!sd3.enabled" value="desc">Describe</v-tab>
                 </v-tabs>
                 <v-window v-model="imageOptionTab">
                   <v-window-item value="uov" eager>
@@ -246,7 +254,7 @@
                               :cover="imagePromptImages[index - 1]? false: true"
                               height="480"
                             ></v-img>
-                            <v-expansion-panels v-model="imagePromptAdvancedPanel">
+                            <v-expansion-panels v-if="!sd3.enabled" v-model="imagePromptAdvancedPanel">
                               <v-expansion-panel value="advanced">
                                 <v-expansion-panel-title>Advanced Options</v-expansion-panel-title>
                                 <v-expansion-panel-text>
@@ -309,6 +317,26 @@
                                 </v-expansion-panel-text>
                               </v-expansion-panel>
                             </v-expansion-panels>
+                            <v-container v-else>
+                              <v-slider
+                                v-model="sd3.strength"
+                                :min="0"
+                                :max="1"
+                                :step="0.001"
+                                label="Strength"
+                              >
+                                <template v-slot:append>
+                                  <v-text-field
+                                    v-model="sd3.strength"
+                                    hide-details
+                                    single-line
+                                    density="compact"
+                                    type="number"
+                                    style="width: 70px"
+                                  ></v-text-field>
+                                </template>
+                              </v-slider>
+                            </v-container>
                           </v-card-text>
                         </v-card>
                       </v-col>
@@ -534,21 +562,27 @@
               @click="startToGenerate(0)"
               width="100%"
               height="56px"
-              color="#5a3cff"
+              :color="sd3.enabled ? '' : '#5a3cff'"
+              :style="sd3.enabled ? sd3.background : ''"
               :disabled="loadingPreset"
             >
-              <span style="white-space: normal;">
-                Generate<br/>
+              <span v-if="!sd3.enabled" style="white-space: normal;">
+                Generate <br/>
                 <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
+                </span>
+              </span>
+              <span v-else style="white-space: normal; color: #0c5536;">
+                Generate SD3 <br/>
+                <span class="text-caption" v-html="getConsumeText(this.sd3.estimateConsume, this.sd3.estimateConsume.imageNumber)">
                 </span>
               </span>
             </v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
             <v-col class="d-flex pa-0 mr-1">
-              <v-btn @click="skipGeneration" :loading="skipLoading" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
+              <v-btn @click="skipGeneration" :loading="skipLoading" :disabled="sd3.enabled" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
             </v-col>
             <v-col class="d-flex pa-0 ml-1">
-              <v-btn @click="stopGeneration" :loading="stopLoading" width="100%" height="56px" color="red-lighten-1">Stop</v-btn>
+              <v-btn @click="stopGeneration" :loading="stopLoading" :disabled="sd3.enabled" width="100%" height="56px" color="red-lighten-1">Stop</v-btn>
             </v-col>
             </v-row>
           </v-col>
@@ -562,8 +596,10 @@
             <v-expansion-panel-title
               expand-icon="mdi-tune"
               collapse-icon="mdi-tune"
-            >Options<v-chip
-                v-show="!selectingPreset && !loadingPreset"
+            >
+              Options
+              <v-chip
+                v-show="!selectingPreset && !loadingPreset && !sd3.enabled"
                 id="preset-clip"
                 class="ma-2"
                 :color="presetColor[selectedPreset]"
@@ -571,13 +607,11 @@
               >
                 [[ presetName[selectedPreset] ]]
               </v-chip>
-              <div
-                v-show="selectingPreset && !loadingPreset"
-              >
+              <div v-show="selectingPreset && !loadingPreset && !sd3.enabled">
                 <v-chip
                   v-for="preset in availablePresets"
-                  class="ma-2"
                   :key="preset"
+                  class="ma-2"
                   :color="presetColor[preset]"
                   @click.stop="updateDefaultOptions(preset)"
                 >
@@ -591,7 +625,7 @@
                 color="#5a3cff"
               ></v-progress-circular>
             </v-expansion-panel-title>
-            <v-expansion-panel-text>
+            <v-expansion-panel-text v-if="!sd3.enabled">
               <v-tabs vertical v-model="settingTab">
                 <v-tab value="settings">Settings</v-tab>
                 <v-tab value="styles">Styles</v-tab>
@@ -859,6 +893,60 @@
                     </template>
                   </v-slider>
                 </v-window-item>
+              </v-window>
+            </v-expansion-panel-text>
+            <v-expansion-panel-text v-else>
+              <v-window>
+                <v-select
+                  v-model="sd3.baseModel"
+                  class="pt-2"
+                  label="Base Model (SD3 only)"
+                  :items="sd3.baseModels"
+                ></v-select>
+                <v-select
+                  v-model="sd3.aspectRatio"
+                  label="Aspect Ratios"
+                  :items="sd3.aspectRatios"
+                ></v-select>
+                <v-slider
+                  v-model="imageNumber"
+                  :min="1"
+                  :max="32"
+                  :step="1"
+                  label="Number of Images to Generate"
+                >
+                  <template v-slot:append>
+                    <v-text-field
+                      v-model="imageNumber"
+                      hide-details
+                      single-line
+                      density="compact"
+                      type="number"
+                      style="width: 70px"
+                    ></v-text-field>
+                  </template>
+                </v-slider>
+                <v-text-field
+                  v-model="negativePrompt"
+                  label="Negative Prompt"
+                  clearable
+                  rows="1"
+                  variant="solo-filled"
+                  auto-grow
+                  placeholder="Describing what you do not want to see."
+                ></v-text-field>
+                <v-checkbox
+                  v-model="isRandom"
+                  label="Use Random Seed"
+                  @change="toggleRandom"
+                ></v-checkbox>
+                <!-- Random Seed -->
+                <v-text-field
+                  v-model="randomSeed"
+                  label="Random Seed"
+                  :disabled="isRandom"
+                  type="number"
+                ></v-text-field>
               </v-window>
             </v-expansion-panel-text>
           </v-expansion-panel>

@@ -383,6 +383,11 @@ class StyleOptions(BaseModel):
     default_list: list[str] = Field(default=[], description="Default value list for the field.")
 
 
+class DefaultSD3Options(BaseModel):
+    base_models: OptionList = Field(description="Avaialable SD3 checkpoints.")
+    aspect_ratios: OptionList = Field(description="Aspect ratio options.")
+
+
 class DefaultOptions(BaseModel):
     hostname: str = Field(description="Base url of the websocket.")
     performances: OptionList = Field(description="Performance options.")
@@ -405,6 +410,7 @@ class DefaultOptions(BaseModel):
     negative_prompt: str = Field(description="Default negative prompt for generation.")
     steps: int | None = Field(description="Default steps for generation.", default=None)
     presets: OptionList = Field(description="Presets for settings for a specific genre.")
+    sd3: DefaultSD3Options = Field(description="SD3 default options")
 
 
 class Like(BaseModel):
@@ -1186,6 +1192,16 @@ def create_api(
             negative_prompt=config_dict.get("default_prompt_negative", modules.config.default_prompt_negative),
             steps=config_dict.get("default_steps", None),
             presets=OptionList(default="default", options=await list_presets(settings.preset_dir)),
+            sd3=DefaultSD3Options(
+                base_models=OptionList(
+                    default=modules.config.sd3_config["baseModel"],
+                    options=modules.config.sd3_config["baseModels"],
+                ),
+                aspect_ratios=OptionList(
+                    default=modules.config.sd3_config["aspectRatio"],
+                    options=modules.config.sd3_config["aspectRatios"],
+                ),
+            )
         )
 
     @app.post("/api/focus/like", response_class=JSONResponse)
