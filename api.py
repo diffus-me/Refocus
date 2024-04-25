@@ -1022,10 +1022,24 @@ def create_api(
         except WebSocketDisconnect:
             print("Client disconnected")
         except system_monitor.MonitorException as error:
+            match (error.status_code, error.code):
+                case (402, "WEBUIFE-01010001"):
+                    reason = "INSUFFICIENT_CREDITS"
+                case (402, "WEBUIFE-01010003"):
+                    reason = "INSUFFICIENT_DAILY_CREDITS"
+                case (429, "WEBUIFE-01010004"):
+                    reason = "REACH_CONCURRENCY_LIMIT"
+                case _:
+                    logger.error(
+                        f"mismatched status_code({error.status_code}) "
+                        f"and code({error.code}) in 'MonitorException'"
+                    )
+                    raise
+
             await websocket.send_json(
                 GenerationProgress(
                     task_id=error.task_id,
-                    status=f"MonitorException.{error.status_code}",
+                    status=f"MonitorException.{reason}",
                     message=str(error),
                     progress=100,
                 ).dict()
