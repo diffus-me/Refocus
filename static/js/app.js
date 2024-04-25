@@ -231,6 +231,34 @@ createApp({
       }
       await this.upgradePopup("NSFW_CONTENT");
     },
+    async getSubscribeURL() {
+      await this.getUserOrderInformation()
+      const price_id = this.userOrderInformation.price_id;
+      if (!price_id) {
+        return null;
+      }
+      const params = new URLSearchParams({
+        price_id: price_id,
+        client_reference_id: Base64.encodeURI(
+          JSON.stringify({ user_id: this.userOrderInformation.user_id }),
+        ),
+        allow_promotion_codes: true,
+        current_url: window.location.href,
+      });
+      return `/pricing_table/checkout?${params.toString()}`;
+    },
+    openPopup(event, title, message, confirmText, url) {
+      const popup = this.popup;
+
+      popup.itemName = event;
+      popup.title = title;
+      popup.message = message;
+      popup.confirmText = confirmText;
+      popup.url = url;
+      popup.isOpen = true;
+
+      addPopupGtagEvent(popup.url, popup.itemName);
+    },
     async upgradePopup(reason) {
       let event, title, confirmText, message, url;
 
@@ -263,20 +291,9 @@ createApp({
           event = "refocus_insufficient_daily_credits";
           title = "Subscribe Now";
           confirmText = "Subscribe Now";
-          url = SUBSCRIPTION_URL;
-
-          await this.getUserOrderInformation()
-          const price_id = this.userOrderInformation.price_id;
-          if (price_id) {
-            const params = new URLSearchParams({
-              price_id: price_id,
-              client_reference_id: Base64.encodeURI(
-                JSON.stringify({ user_id: this.userOrderInformation.user_id }),
-              ),
-              allow_promotion_codes: true,
-              current_url: window.location.href,
-            });
-            url = `/pricing_table/checkout?${params.toString()}`;
+          url = await this.getSubscribeURL();
+          if (!url) {
+            url = SUBSCRIPTION_URL;
           }
 
           message =
@@ -324,16 +341,7 @@ createApp({
           throw `Unknown upgrade reason: "${reason}".`;
       }
 
-      const popup = this.popup;
-
-      popup.itemName = event;
-      popup.title = title;
-      popup.message = message;
-      popup.confirmText = confirmText;
-      popup.url = url;
-      popup.isOpen = true;
-
-      addPopupGtagEvent(popup.url, popup.itemName);
+      this.openPopup(event, title, message, confirmText, url);
     },
     pushHistory(errorMessage = null) {
       this.historyResults.unshift({
@@ -882,8 +890,13 @@ createApp({
         })
         .then(async (result) => {
           if (result.status === "failed") {
+            if (result.message.startsWith("MonitorException.")) {
+              const reason = result.message.split(".")[1];
+              await this.upgradePopup(reason);
+            } else {
+              notifier.warning("Failed to generate prompt uisng GPT vision.");
+            }
             this.describeImageLoading = false;
-            notifier.warning("Failed to generate prompt uisng GPT vision.");
             return;
           } else if (result.status === "finished") {
             this.describeImageLoading = false;
@@ -1598,7 +1611,7 @@ createApp({
         image_number: this.imageNumber,
       }
 
-      const response = await fetch(
+      return fetch(
         "/api/v3/internal/stability/sd3/txt2img",
         {
           method: "POST",
@@ -1606,7 +1619,6 @@ createApp({
           body: JSON.stringify(body),
         },
       )
-      return await response.json();
     },
     async postSD3img2img() {
       const body = {
@@ -1620,7 +1632,7 @@ createApp({
         strength: this.sd3.strength,
       }
 
-      const response = await fetch(
+      return fetch(
         "/api/v3/internal/stability/sd3/img2img",
         {
           method: "POST",
@@ -1628,7 +1640,6 @@ createApp({
           body: JSON.stringify(body),
         },
       )
-      return await response.json();
     },
     async _checkSD3Permission(use_cache = true) {
       if (!use_cache) {
@@ -1653,20 +1664,19 @@ createApp({
       }
       if (result.reason === "TIER_NOT_ALLOWED") {
         const allowed_tiers_message = _joinTiers(this.sd3.allowerTiers);
-        this.popup.message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
-                              Please upgrade to ${allowed_tiers_message} to use it.`,
-        this.popup.itemName = "refocus_sd3_tier_checker";
-        this.popup.isOpen = true;
-        addPopupGtagEvent(this.popup.url, this.popup.itemName);
+        const message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
+                        Please upgrade to ${allowed_tiers_message} to use it.`;
 
+        this.openPopup("refocus_sd3_tier_checker", "Upgrade Now", message, "Upgrade", SUBSCRIPTION_URL);
         return false;
       }
       if (result.reason === "TRIAL_NOT_ALLOWED") {
-        this.popup.message = "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
-        this.popup.itemName = "refocus_sd3_trialing_checker";
-        this.popup.isOpen = true;
-        addPopupGtagEvent(this.popup.url, this.popup.itemName);
-
+        const message = "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
+        const url = await this.getSubscribeURL();
+        if (!url) {
+          url = SUBSCRIPTION_URL;
+        }
+        this.openPopup("refocus_sd3_trialing_checker", "Subscribe Now", message, "Subscribe Now", url);
         return false;
       }
       return false;
@@ -1690,7 +1700,17 @@ createApp({
         } else {
           response = await this.postSD3txt2img();
         }
-        this.runningTaskResultImages = response.images.map((item) => ({src: item.image, id: 0}));
+        if (!response.ok) {
+          const content = await response.json();
+          if (content.detail && content.detail.need_upgrade) {
+            await this.upgradePopup(content.detail.reason);
+          }
+          return;
+        }
+
+        content = await response.json();
+        this.runningTaskResultImages = content.images.map((item) => ({src: item.image, id: 0}));
+
       } finally {
         this.generating = false;
         this.pushHistory();
