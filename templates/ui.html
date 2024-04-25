@@ -105,7 +105,7 @@
     <div id="app">
       <v-dialog v-model="popup.isOpen" width="50%">
         <v-card border="1000">
-          <v-card-title class="text-h5"> Upgrade Now </v-card-title>
+          <v-card-title class="text-h5"> [[ popup.title ]] </v-card-title>
             <v-card-text class="text-body-1" v-html="popup.message"></v-card-text>
             <v-card-actions>
             <v-spacer></v-spacer>
@@ -113,7 +113,7 @@
               Cancel
             </v-btn>
             <v-btn color="green-darken-1" variant="text" @click="openSubscriptionPage">
-              Upgrade
+              [[ popup.confirmText ]]
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -1207,6 +1207,7 @@
       }
 
       const AFFILIATE_PROGRAM = '<a href="/affiliate/everyone" target="_blank" style="text-wrap: nowrap">Affiliate Program</a>';
+      const SUBSCRIPTION_URL = "/pricing_table";
       const NSFW_ALLOWED_TIERS = ["Basic", "Plus", "Pro", "Api"];
       const NSFW_ALLOWED_TIERS_MESSAGE = joinWords(NSFW_ALLOWED_TIERS, "or");
     </script>

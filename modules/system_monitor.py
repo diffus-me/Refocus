@@ -14,13 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 class MonitorException(Exception):
-    def __init__(self, task_id: str, status_code: int, msg: str):
+    def __init__(self, task_id: str, status_code: int, code: str, message: str):
         self.task_id = task_id
         self.status_code = status_code
-        self._msg = msg
+        self.code = code
+        self.message = message
 
     def __repr__(self) -> str:
-        return self._msg
+        return f"{self.status_code} {self.code} {self.message}"
 
 
 class MonitorTierMismatchedException(Exception):
@@ -111,11 +112,10 @@ async def _before_task_started(
             return job_id
 
         # log the response if request failed
-        resp_text = await resp.text()
-        logger.error(
-            f'create monitor log failed, status: {resp.status}, message: {resp_text[:min(100, len(resp_text))]}'
-        )
-        raise MonitorException(task_id, resp.status, resp_text)
+        content = await resp.json()
+        logger.error(f"create monitor log failed, status: {resp.status}, content: {content}")
+
+        raise MonitorException(task_id, resp.status, content["code"], content["message"])
 
 
 async def _after_task_finished(
