@@ -10,6 +10,7 @@ import mimetypes
 import os
 import socket
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 from functools import cache
@@ -1000,25 +1001,31 @@ def create_api(
                         function_name=function_name,
                         decoded_params=decoded_params,
                     ) as step_logger:
-                        async for progress in generate_clicked(
-                            *args,
-                            base_dir=output_dir,
-                            task_id=generation_option.task_id,
-                            metadata=request_headers,
-                        ):
-                            previous_status = await update_database(
-                                progress, previous_status, user_id, generation_option
-                            )
-                            generate_progress = await extract_progress(progress, is_url, user_id, start_time)
-                            result_dict = generate_progress.dict()
-                            await websocket.send_json(result_dict)
-                            result_images = progress.status.image_filepaths
-                        step_logger(result_images, result_dict.get('status', 'failed') == 'failed')
+                        try:
+                            async for progress in generate_clicked(
+                                *args,
+                                base_dir=output_dir,
+                                task_id=generation_option.task_id,
+                                metadata=request_headers,
+                            ):
+                                previous_status = await update_database(
+                                    progress, previous_status, user_id, generation_option
+                                )
+                                generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                                result_dict = generate_progress.dict()
+                                await websocket.send_json(result_dict)
+                                result_images = progress.status.image_filepaths
+                            step_logger(result_images, result_dict.get('status', 'failed') == 'failed')
 
-                    if result_dict:
-                        task_logger(result_images, result_dict.get('status', 'failed') == 'failed')
-                    else:
-                        task_logger({}, True)
+                            task_logger(result_images, result_dict.get('status', 'failed') == 'failed')
+                        except Exception as e:
+                            step_logger({
+                                "exception": traceback.format_exc(),
+                            }, True)
+                            task_logger({
+                                "exception": traceback.format_exc(),
+                            }, True)
+                            raise
         except WebSocketDisconnect:
             print("Client disconnected")
         except system_monitor.MonitorException as error:
@@ -1049,7 +1056,7 @@ def create_api(
             logger.exception(f'un-handled prediction exception: {e.__str__()}')
             await websocket.send_json(
                 GenerationProgress(
-                    task_id=task_id,
+                    task_id=task_id or "",
                     status=f"failed",
                     message=str(e),
                     progress=100,
