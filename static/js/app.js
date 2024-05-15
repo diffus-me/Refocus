@@ -1649,7 +1649,7 @@ createApp({
       if (!this.sd3.allowerTiers.includes(order_info.tier)) {
           return { allowed: false, reason: "TIER_NOT_ALLOWED" }
       }
-      if (order_info.trailing) {
+      if (order_info.trialing) {
           return { allowed: false, reason: "TRIAL_NOT_ALLOWED" }
       }
       return { allowed: true }
