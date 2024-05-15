@@ -209,7 +209,6 @@ createApp({
         },
         background: "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
         textColor: "#0c5536",
-        allowerTiers: ["Basic", "Plus", "Pro", "Api", "LTD S"],
       }
     };
   },
@@ -1649,12 +1648,12 @@ createApp({
         },
       )
     },
-    async _checkSD3Permission(use_cache = true) {
+    async _checkSD3Permission(allowed_tiers, use_cache = true) {
       if (!use_cache) {
          await this.getUserOrderInformation();
       }
       const order_info = this.userOrderInformation;
-      if (!this.sd3.allowerTiers.includes(order_info.tier)) {
+      if (!allowed_tiers.includes(order_info.tier)) {
           return { allowed: false, reason: "TIER_NOT_ALLOWED" }
       }
       if (order_info.trialing) {
@@ -1663,9 +1662,12 @@ createApp({
       return { allowed: true }
     },
     async checkSD3Permission() {
-      let result = await this._checkSD3Permission()
+      const permissions = await this.getFeaturePermissions();
+      const allowed_tiers = permissions.buttons.SD3.allowed_tiers;
+
+      let result = await this._checkSD3Permission(allowed_tiers)
       if (!result.allowed) {
-        result = await this._checkSD3Permission(false)
+        result = await this._checkSD3Permission(allowed_tiers, false)
       }
       if (result.allowed) {
         return true;
