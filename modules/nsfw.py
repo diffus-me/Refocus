@@ -11,7 +11,7 @@ from PIL import Image, ImageFilter
 if TYPE_CHECKING:
     from modules.async_worker import AsyncTask
 
-_NSFW_ALLOWED_TIERS = {"basic", "plus", "pro", "api"}
+_NSFW_ALLOWED_TIERS = {"basic", "plus", "pro", "api", "ltd s"}
 _OPEN_NSFW_MODEL: Model | None = None
 
 

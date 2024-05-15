@@ -209,7 +209,7 @@ createApp({
         },
         background: "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
         textColor: "#0c5536",
-        allowerTiers: ["Basic", "Plus", "Pro", "Api"],
+        allowerTiers: ["Basic", "Plus", "Pro", "Api", "LTD S"],
       }
     };
   },
