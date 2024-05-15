@@ -21,7 +21,7 @@ function _joinWords(words, conjunction = "and") {
 
 function _joinTiers(tiers) {
   const unique_tiers = [];
-  for (let tier of ["Basic", "Plus", "Pro", "Api"]) {
+  for (let tier of UPGRADABLE_TIERS) {
     if (tiers.includes(tier)) {
       unique_tiers.push(tier);
     }
@@ -312,29 +312,32 @@ createApp({
 
           await this.getUserOrderInformation()
           const tier = this.userOrderInformation.tier;
-          const index = permissions.task_concurrency_limits.findIndex(
-            (item) => item.tier === tier,
-          );
-          if (index === -1) {
-            throw `user tier "${tier}" not found in task_concurrency_limits permissions.`;
+
+          const current_limit = permissions.limits[tier];
+          if (!current_limit) {
+            throw `user tier "${tier}" not found in the "limits" of permissions.`;
           }
-          const current_tier_limit = permissions.task_concurrency_limits[index].limit;
-          let target_tier_limit = permissions.task_concurrency_limits
-            .slice(index + 1)
-            .filter((item) => item.limit > current_tier_limit);
+
+          const max_concurrent_tasks = current_limit.max_concurrent_tasks;
+
           const getUnit = (limit) => (limit === 1 ? "task" : "tasks");
 
-          message = `Your current plan allows only ${current_tier_limit} concurrent \
-            ${getUnit(current_tier_limit)}.`;
-          if (target_tier_limit.length > 0) {
+          message = `Your current plan allows only ${max_concurrent_tasks} concurrent \
+            ${getUnit(max_concurrent_tasks)}.`;
+
+          const higher_limits = permissions.upgradableLimits.filter(
+            (item) => item.max_concurrent_tasks > max_concurrent_tasks,
+          );
+          if (higher_limits.length > 0) {
             message += " Upgrade to:";
             message += "<ul style='list-style: inside'>";
-            for (let limit_info of target_tier_limit) {
-              message += `<li><b>${limit_info.tier}</b> to run up to ${limit_info.limit} \
-                ${getUnit(limit_info.limit)} simultaneously;</li>`;
+            for (let limit of higher_limits) {
+              message += `<li><b>${limit.tier}</b> to run up to ${limit.max_concurrent_tasks} \
+                ${getUnit(limit.max_concurrent_tasks)} simultaneously;</li>`;
             }
             message += "</ul>";
           }
+
           break;
 
         default:
@@ -1329,11 +1332,16 @@ createApp({
       if (!this._featurePermissions) {
         const response = await fetch("/config/feature_permissions");
         const body = await response.json();
+
         this._featurePermissions = {
           generate: body.generate,
           buttons: Object.fromEntries(body.buttons.map((item) => [item.name, item])),
-          task_concurrency_limits: body.task_concurrency_limits,
+          limits: Object.fromEntries(body.limits.map((item) => [item.tier, item])),
         };
+
+        this._featurePermissions.upgradableLimits = UPGRADABLE_TIERS.map(
+          (item) => this._featurePermissions.limits[item],
+        );
       }
       return this._featurePermissions;
     },
