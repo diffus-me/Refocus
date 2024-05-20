@@ -1673,7 +1673,7 @@ createApp({
         return true;
       }
       if (result.reason === "TIER_NOT_ALLOWED") {
-        const allowed_tiers_message = _joinTiers(this.sd3.allowerTiers);
+        const allowed_tiers_message = _joinTiers(allowed_tiers);
         const message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
                         Please upgrade to ${allowed_tiers_message} to use it.`;
 
