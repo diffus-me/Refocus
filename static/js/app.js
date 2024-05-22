@@ -1697,12 +1697,14 @@ createApp({
         return;
       }
 
+      let errorMessage = null;
       let response;
 
       this.generating = true;
       this.runningTaskMessage = "Generating...";
       this.runningTaskResultImages = [];
       this.runningTaskId = randomId();
+
 
       try {
         if (this.imagePromptImages[0]) {
@@ -1711,9 +1713,18 @@ createApp({
           response = await this.postSD3txt2img();
         }
         if (!response.ok) {
-          const content = await response.json();
-          if (content.detail && content.detail.need_upgrade) {
-            await this.upgradePopup(content.detail.reason);
+          const status_code = response.status;
+          if (status_code === 402 || status_code === 429) {
+            const content = await response.json();
+            if (content.detail.need_upgrade) {
+              await this.upgradePopup(content.detail.reason);
+            }
+          } else if (status_code === 403) {
+            const content = await response.json();
+            const detail = content.detail;
+            errorMessage = `Error "${detail.name}" from Stability AI: ${detail.errors.join(" ")}`;
+          } else {
+            errorMessage = await response.text();
           }
           return;
         }
@@ -1723,7 +1734,7 @@ createApp({
 
       } finally {
         this.generating = false;
-        this.pushHistory();
+        this.pushHistory(errorMessage);
         this.runningTaskId = "";
       }
     }
