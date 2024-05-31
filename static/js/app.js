@@ -207,7 +207,7 @@ createApp({
           discount: 0,
           imageNumber: 2,
         },
-        background: "background: #E0E0E0",
+        background: "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
         textColor: "#0c5536",
       }
     };
