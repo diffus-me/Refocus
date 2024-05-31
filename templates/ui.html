@@ -503,9 +503,12 @@
                           >
                             <span style="white-space: normal;">
                               Describe into Prompt (GPT-4 Vision)<span v-show="gptVisionTask.queueLength">([[ gptVisionTask.position ]]/[[ gptVisionTask.length ]])</span><br/>
-                              <span class="text-caption" v-html="getConsumeText(this.estimateGptVisionConsume)">
+                              <span class="text-caption" v-html="getConsumeText(this.estimateGptVisionConsume)"></span>
                             </span>
                           </v-btn>
+                        </div>
+                        <div class="ma-4" v-if="describeErrorMessage">
+                          <v-alert type="error" :text="describeErrorMessage"></v-alert>
                         </div>
                       </v-col>
                     </v-row>

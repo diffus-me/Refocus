@@ -115,6 +115,7 @@ createApp({
       contentTypeSelection: "Photograph",
       contentTypes: [],
       describeImageUploader: null,
+      describeErrorMessage: null,
       inpaintImageUploader: null,
       inpaintImageFiles: [],
       inpaintSelection: "Inpaint or Outpaint (default)",
@@ -956,6 +957,7 @@ createApp({
     },
     describeImageGptVision() {
       this.describeImageLoading = true;
+      this.describeErrorMessage = null;
       fetch("/api/v3/gpt/vision/prompt", {
         method: "POST",
         headers: {
@@ -971,6 +973,10 @@ createApp({
         .then((response) => {
           if (response.status === 200) {
             return response.json();
+          } else if (response.status === 451) {
+            response.json().then((result) => {
+              this.describeErrorMessage = result.detail.message;
+            })
           }
           return Promise.reject(response);
         })
@@ -1719,7 +1725,10 @@ createApp({
             if (content.detail.need_upgrade) {
               await this.upgradePopup(content.detail.reason);
             }
-          } else if (status_code === 403) {
+          } else if (status_code === 451) {
+            const content = await response.json();
+            errorMessage = content.detail.message;
+          } else if (status_code === 424) {
             const content = await response.json();
             const detail = content.detail;
             errorMessage = `Error "${detail.name}" from Stability AI: ${detail.errors.join(" ")}`;
