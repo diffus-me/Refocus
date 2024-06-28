@@ -194,6 +194,12 @@ createApp({
         confirmText: "",
         url: "",
       },
+      safetyPopup: {
+        isOpen: false,
+        checkboxA: false,
+        checkboxB: false,
+        isAgreed: false,
+      },
       userOrderInformation: null,
       _featurePermissions: null,
       sd3: {
@@ -230,6 +236,117 @@ createApp({
         return;
       }
       await this.upgradePopup("NSFW_CONTENT");
+    },
+    async getSafetyAgreement() {
+      const params = new URLSearchParams({ field: SAFETY_AGREEMENT_KEY });
+      const url = `/api/user_profile?${params.toString()}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw `Get safety agreement agreed failed: ${response.statusText}`;
+      }
+      const content = await response.json();
+
+      return content[SAFETY_AGREEMENT_KEY];
+    },
+    async setSafetyAgreement() {
+      const url = "/api/user_profile";
+      const body = {};
+      body[SAFETY_AGREEMENT_KEY] = true;
+
+      const response = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        throw `Set safety agreement agreed failed: ${response.statusText}`;
+      }
+      return await response.json();
+    },
+    async getDirtyWords() {
+      if (!this._dirtyWords) {
+        const response = await fetch("/public/dirty_words.txt", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!response.ok) {
+          throw `Request dirty words failed: ${response.statusText}`;
+        }
+        const body = await response.text();
+
+        const lines = body.toLowerCase().split(/[\r\n]+/);
+
+        this._dirtyWords = [...new Set(lines)];
+      }
+      return this._dirtyWords;
+    },
+    async checkPromptDirtyWords(prompt) {
+      prompt = prompt.toLowerCase();
+
+      const words_1 = prompt.split(/\W+/).filter(Boolean);
+      const words_2 = prompt.split(/[\s,]+/).filter(Boolean);
+
+      const words = new Set([...words_1, ...words_2]);
+      if (words.size === 0) {
+        return false;
+      }
+
+      const dirty_words = await this.getDirtyWords();
+
+      let results = dirty_words.filter((word) => words.has(word));
+
+      return results.length > 0;
+    },
+    async checkSafetyAgreement() {
+      if (!this.userOrderInformation) {
+          await this.getUserOrderInformation();
+      }
+      const tier = this.userOrderInformation.tier;
+      const permissions = await this.getFeaturePermissions();
+
+      if (!permissions.features.PrivateImage.allowed_tiers.includes(tier)) {
+        return true;
+      }
+      if (window.Cookies.get(SAFETY_AGREEMENT_KEY)) {
+        return true;
+      }
+
+      if (await this.getSafetyAgreement()) {
+        window.Cookies.set(SAFETY_AGREEMENT_KEY, true, { expires: 360 });
+        return true;
+      }
+
+      if (!(await this.checkPromptDirtyWords(this.prompt))) {
+        return true;
+      }
+
+      this.safetyPopup.isOpen = true;
+
+      while (this.safetyPopup.isOpen) {
+        await sleep(200);
+      }
+
+      try {
+        if (this.safetyPopup.isAgreed) {
+          await this.setSafetyAgreement();
+          window.Cookies.set(SAFETY_AGREEMENT_KEY, true, { expires: 360 });
+          return true;
+        }
+
+        return false;
+
+      } finally {
+        this.safetyPopup.isAgreed = false;
+        this.safetyPopup.checkboxA = false;
+        this.safetyPopup.checkboxB = false;
+      }
     },
     async getSubscribeURL() {
       await this.getUserOrderInformation()
@@ -623,9 +740,12 @@ createApp({
       }
       return genParams;
     },
-    startToGenerate(retry) {
+    async startToGenerate(retry) {
       if (this.sd3.enabled) {
         this.generateSD3();
+        return;
+      }
+      if (!(await this.checkSafetyAgreement())) {
         return;
       }
       if (retry > 5) {
@@ -1341,6 +1461,7 @@ createApp({
         this._featurePermissions = {
           generate: body.generate,
           buttons: Object.fromEntries(body.buttons.map((item) => [item.name, item])),
+          features: Object.fromEntries(body.features.map((item) => [item.name, item])),
           limits: Object.fromEntries(body.limits.map((item) => [item.tier, item])),
         };
 
