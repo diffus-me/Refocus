@@ -104,6 +104,64 @@
   </head>
   <body>
     <div id="app">
+      <v-dialog v-model="safetyPopup.isOpen" width="45%">
+        <v-card border="1000">
+          <v-card-title class="text-h5"> Safety Agreement </v-card-title>
+            <v-card-text class="text-body-1">
+              Potential Not Safe For Work (NSFW) content detected in the prompt. To continue,
+              you must acknowledge and agree to our terms. By clicking
+              <b style="white-space: nowrap;">I Agree</b>,
+              you confirm that you meet the following criteria and will use the content
+              responsibly in accordance with our policies.
+              <p><br /></p>
+              <v-checkbox
+                v-model="safetyPopup.checkboxA"
+                density="compact"
+                hide-details
+                label="I am at least 18 years old or of legal age in my jurisdiction"
+              >
+              </v-checkbox>
+              <v-checkbox
+                v-model="safetyPopup.checkboxB"
+                density="compact"
+                hide-details
+               >
+                <template v-slot:label>
+                  I have read and agree to Diffus's&nbsp;
+                  <a
+                    href="https://www.diffus.me/safety/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Safety Agreement
+                  </a>
+                </template>
+              </v-checkbox>
+            </v-card-text>
+            <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn
+              color="grey-darken-1"
+              variant="text"
+              @click="safetyPopup.isAgreed = false; safetyPopup.isOpen = false"
+            >
+              Cancel
+            </v-btn>
+            <v-btn
+              color="green-darken-1"
+              variant="text"
+              :style="{
+                'cursor': (!safetyPopup.checkboxA || !safetyPopup.checkboxB) ? 'not-allowed' : '',
+                'pointer-events': (!safetyPopup.checkboxA || !safetyPopup.checkboxB) ? 'auto' : '',
+              }"
+              :disabled="!safetyPopup.checkboxA || !safetyPopup.checkboxB"
+              @click="safetyPopup.isAgreed = true; safetyPopup.isOpen = false"
+            >
+              I Agree
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
       <v-dialog v-model="popup.isOpen" width="50%">
         <v-card border="1000">
           <v-card-title class="text-h5"> [[ popup.title ]] </v-card-title>
@@ -1201,6 +1259,10 @@
     <script type="text/javascript" src="/api/focus/static/js/mask.js"></script>
     <script type="text/javascript" src="/api/focus/static/js/utils.js"></script>
     <script>
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
       function joinWords(words, conjunction = "and") {
         const names = words.map((item) => `"${item}"`);
         if (names.length == 1) {
@@ -1212,6 +1274,7 @@
 
       const AFFILIATE_PROGRAM = '<a href="/affiliate/everyone" target="_blank" style="text-wrap: nowrap">Affiliate Program</a>';
       const SUBSCRIPTION_URL = "/pricing_table";
+      const SAFETY_AGREEMENT_KEY = "safety_agreement_agreed";
       const UPGRADABLE_TIERS = ["Basic", "Plus", "Pro", "Api"];
       const NSFW_ALLOWED_TIERS = ["Basic", "Plus", "Pro", "Api"];
       const NSFW_ALLOWED_TIERS_MESSAGE = joinWords(NSFW_ALLOWED_TIERS, "or");
