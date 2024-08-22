@@ -1,5 +1,5 @@
 import modules.core as core
-import os
+import gc
 import torch
 import modules.patch
 import modules.config
@@ -25,6 +25,28 @@ final_refiner_unet = None
 final_refiner_vae = None
 
 loaded_ControlNets = {}
+
+
+def clear_pipeline():
+    global model_base, model_refiner
+    global final_unet, final_clip, final_vae, final_refiner_unet, final_refiner_vae, final_expansion
+    global loaded_ControlNets
+
+    model_base = core.StableDiffusionModel()
+    model_refiner = core.StableDiffusionModel()
+
+    final_unet = None
+    final_clip = None
+    final_vae = None
+    final_refiner_unet = None
+    final_refiner_vae = None
+    final_expansion = None
+
+    loaded_ControlNets = {}
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
 
 @torch.no_grad()
@@ -253,11 +275,11 @@ def refresh_everything(refiner_model_name, base_model_name, loras,
     return
 
 
-refresh_everything(
-    refiner_model_name=modules.config.default_refiner_model_name,
-    base_model_name=modules.config.default_base_model_name,
-    loras=modules.config.default_loras
-)
+#refresh_everything(
+#    refiner_model_name=modules.config.default_refiner_model_name,
+#    base_model_name=modules.config.default_base_model_name,
+#    loras=modules.config.default_loras
+#)
 
 
 @torch.no_grad()

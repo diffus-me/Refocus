@@ -1,0 +1,10 @@
+slender
+stout
+rotund
+emaciated
+gangly
+muscular
+frail
+corpulent
+withered
+bloated

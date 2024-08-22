@@ -1,4 +1,5 @@
 {
+    "task_type": "sdxl",
     "default_model": "sd_xl_base_1.0_0.9vae.safetensors",
     "default_refiner": "sd_xl_refiner_1.0_0.9vae.safetensors",
     "default_refiner_switch": 0.75,

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 
 def _get_binary_path(sha256: str) -> Path:
-    from api import settings
+    from settings import settings
 
     sha256 = sha256.lower()
     return Path(settings.binary_dir) / sha256[:2] / sha256[2:4] / sha256[4:6] / sha256
@@ -61,9 +61,7 @@ def _download_file_with_retry(
     if error is not None:
         raise error
 
-    raise ValueError(
-        f"Download sha256 mismatch, target sha256: '{sha256}', downloaded sha256: '{local_sha256}'"
-    )
+    raise ValueError(f"Download sha256 mismatch, target sha256: '{sha256}', downloaded sha256: '{local_sha256}'")
 
 
 class ModelInfo(BaseModel):
@@ -71,7 +69,22 @@ class ModelInfo(BaseModel):
     name: str
     sha256: str
     url: str
-    base: Literal["SDXL", "SDV1"] | None
+    base: Literal[
+        "SDXL",
+        "SDV1",
+        "Playground v2",
+        "Pony",
+        "SD 3",
+        "SD3",
+        "SDXL 1.0",
+        "SDXL Distilled",
+        "SDXL Hyper",
+        "SDXL Turbo",
+        "Flux.1 D",
+        "Flux.1 S",
+        "Flux",
+        "SSD",
+    ] | None
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.name})"
@@ -140,6 +153,15 @@ class AllModelInfo:
         for model in self._models:
             model.download_model()
 
+    def get_model(self, name: str) -> ModelInfo | None:
+        if name in self.checkpoint_models:
+            return self.checkpoint_models[name]
+        if name in self.lora_models:
+            return self.lora_models[name]
+        if name in self.embedding_models:
+            return self.embedding_models[name]
+        return None
+
 
 _all_model_info: AllModelInfo | None = None
 
@@ -148,7 +170,7 @@ def get_all_model_info() -> AllModelInfo:
     global _all_model_info
 
     if _all_model_info is None:
-        from api import settings
+        from settings import settings
 
         _all_model_info = AllModelInfo(settings.models_db_path)
 
@@ -165,7 +187,7 @@ def update_model_list() -> None:
     all_model_info = get_all_model_info()
 
     config.model_filenames = sorted(
-        model.name for model in all_model_info.checkpoint_models.values() if model.base == "SDXL"
+        model.name for model in all_model_info.checkpoint_models.values() if model.base in set(["SDXL", "Flux.1 D", "Flux.1 S", "Flux", "SSD", "SD3"])
     )
     config.refiner_model_filenames = sorted(all_model_info.checkpoint_models.keys())
     config.lora_filenames = sorted(all_model_info.lora_models.keys())

@@ -1,0 +1,48 @@
+<html>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #wrapper{
+            background-size: contain; /* scales the image */
+            background-position: center; /* centers the image */
+        }
+        img{
+            max-width: 100%;
+            max-height: 100%;
+            bottom: 0;
+            left: 0;
+            margin: auto;
+            overflow: auto;
+            position: fixed;
+            right: 0;
+            top: 0;
+            -o-object-fit: contain;
+            object-fit: contain;
+            zoom: 10;
+        }
+    </style>
+    <head>
+        <script type="module">
+            import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@0.1.4/dist/index.min.js";
+            async function getimage() {
+                try {
+                    const app = await client(document.URL);
+                    var result = await app.predict("/last_image");    
+                    document.getElementById("slideshow").src = "/file=" + result.data;
+                    result = null;
+                    setTimeout(getimage, 3000);
+                } catch (error) {
+                    // Error... Wait a while
+                    setTimeout(getimage, 20000);
+                }
+            }
+            setTimeout(getimage, 1000);
+        </script>
+    </head>
+    <body bgcolor=black>
+            <img id="slideshow">
+    </body>
+</html>

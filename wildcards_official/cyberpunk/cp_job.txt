@@ -1,0 +1,28 @@
+doctor 
+street samurai 
+police officer
+artist
+citizen
+teacher
+nurse
+Street Samurai
+Deckers
+Riggers
+Magicians
+Shamans
+Face
+Technomancers
+Mystic Adepts
+Weapon Specialist
+Bounty Hunter
+Info Broker
+Fixer
+Gang member
+Corpsec
+Corporate executive
+Street vendor
+Journalist
+Bartender
+Alchemist
+Talismonger
+Runner

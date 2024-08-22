@@ -8,7 +8,6 @@ import modules.flags
 import modules.sdxl_styles
 
 from modules.model_loader import load_file_from_url
-from modules.util import get_files_from_folder
 from modules.model_info import overwrite_config
 
 
@@ -379,14 +378,14 @@ def add_ratio(x):
     a, b = x.replace('*', ' ').split(' ')[:2]
     a, b = int(a), int(b)
     g = math.gcd(a, b)
-    return f'{a}×{b} <span style="color: grey;"> \U00002223 {a // g}:{b // g}</span>'
+    return f'{a}x{b} <span style="color: grey;"> \U00002223 {a // g}:{b // g}</span>'
 
 
 def convert_ratio(x):
     a, b = x.replace('*', ' ').split(' ')[:2]
     a, b = int(a), int(b)
     g = math.gcd(a, b)
-    return f'{a}×{b} ({a // g}:{b // g})'
+    return f'{a}x{b} ({a // g}:{b // g})'
 
 default_simplified_aspect_ratio = convert_ratio(default_aspect_ratio)
 default_aspect_ratio = add_ratio(default_aspect_ratio)
@@ -419,6 +418,7 @@ lora_filenames = []
 
 
 def get_model_filenames(folder_path, name_filter=None):
+    from modules.util import get_files_from_folder
     return get_files_from_folder(folder_path, ['.pth', '.ckpt', '.bin', '.safetensors', '.fooocus.patch'], name_filter)
 
 

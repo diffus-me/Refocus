@@ -1,0 +1,9 @@
+{
+    "Speed": {"custom_steps": 30, "cfg": 8, "sampler_name": "dpmpp_2m_sde_gpu", "scheduler": "karras", "clip_skip": 1},
+    "Quality": {"custom_steps": 60, "cfg": 8, "sampler_name": "dpmpp_2m_sde_gpu", "scheduler": "karras", "clip_skip": 1},
+    "Lcm": {"custom_steps": 4, "cfg": 1.5, "sampler_name": "lcm", "scheduler": "sgm_uniform", "clip_skip": 1},
+    "Lightning": {"custom_steps": 4, "cfg": 2, "sampler_name": "dpmpp_sde", "scheduler": "karras", "clip_skip": 1},
+    "Pony XL": {"custom_steps": 30, "cfg": 8.5, "sampler_name": "euler_ancestral", "scheduler": "simple", "clip_skip": 2},
+    "SD3": {"custom_steps": 30, "cfg": 5, "sampler_name": "dpmpp_2m", "scheduler": "sgm_uniform", "clip_skip": 1}
+}
+

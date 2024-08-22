@@ -1,10 +1,22 @@
+import gc
 import threading
 from modules import script_callbacks
-from typing import Any
+from typing import Any, Literal
+from PIL import Image
+import functools
+
+from modules.model_info import get_all_model_info
 
 
 class AsyncTask:
-    def __init__(self, task_id, args, base_dir: str | None = None, metadata: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        task_id,
+        args,
+        base_dir: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        task_type: Literal["sdxl", "sd3", "flux"] | None = None,
+    ):
         self.task_id = task_id
         self.args = args
         self.yields = []
@@ -13,6 +25,7 @@ class AsyncTask:
         self.is_nsfw = []
         self.base_dir: str | None = base_dir
         self.metadata = metadata
+        self.task_type = task_type
 
 async_tasks: list[AsyncTask] = []
 running_task: AsyncTask | None = None
@@ -38,7 +51,8 @@ def worker():
     import modules.flags as flags
     import modules.config
     import modules.patch
-    import ldm_patched.modules.model_management
+    from ldm_patched.modules.model_management import (
+        InterruptProcessingException, processing_interrupted, throw_exception_if_processing_interrupted)
     import extras.preprocessors as preprocessors
     import modules.inpaint_worker as inpaint_worker
     import modules.constants as constants
@@ -53,6 +67,11 @@ def worker():
     from modules.util import remove_empty_str, HWC3, resize_image, \
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image, erode_or_dilate
     from modules.upscaler import perform_upscale
+    from modules.prompt_processing import process_metadata, process_prompt, parse_loras
+    from modules.util import generate_temp_filename, TimeIt, model_hash, get_lora_hashes
+    import modules.pipelines
+    import modules.controlnet
+    from modules.settings import default_settings
 
     try:
         async_gradio_app = shared.gradio_root
@@ -64,9 +83,12 @@ def worker():
     except Exception as e:
         print(e)
 
-    def progressbar(async_task, number, text):
+
+    all_models = get_all_model_info()
+
+    def progressbar(async_task, number, text, preview_image = None, status = "preview"):
         print(f'[Fooocus] {text}')
-        async_task.yields.append(['preview', (number, text, None)])
+        async_task.yields.append([status, (number, text, preview_image)])
 
     def yield_result(
         async_task,
@@ -250,7 +272,7 @@ def worker():
         denoising_strength = 1.0
         tiled = False
 
-        width, height = aspect_ratios_selection.replace('×', ' ').split(' ')[:2]
+        width, height = aspect_ratios_selection.replace('x', ' ').split(' ')[:2]
         width, height = int(width), int(height)
 
         skip_prompt_processing = False
@@ -813,32 +835,33 @@ def worker():
                 target_images = []
                 is_nsfw_list = []
                 for x in imgs:
-                    d = [
-                        ('Prompt', task['log_positive_prompt']),
-                        ('Negative Prompt', task['log_negative_prompt']),
-                        ('Fooocus V2 Expansion', task['expansion']),
-                        ('Styles', str(raw_style_selections)),
-                        ('Performance', performance_selection),
-                        ('Resolution', str((width, height))),
-                        ('Sharpness', sharpness),
-                        ('Guidance Scale', guidance_scale),
-                        ('ADM Guidance', str((
+                    meta = {
+                        'Prompt': task['log_positive_prompt'],
+                        'Negative Prompt': task['log_negative_prompt'],
+                        'Fooocus V2 Expansion': task['expansion'],
+                        'Styles': str(raw_style_selections),
+                        'Performance': performance_selection,
+                        'Resolution': str((width, height)),
+                        'Sharpness': sharpness,
+                        'Guidance Scale': guidance_scale,
+                        'ADM Guidance': str((
                             modules.patch.positive_adm_scale,
                             modules.patch.negative_adm_scale,
-                            modules.patch.adm_scaler_end))),
-                        ('Base Model', base_model_name),
-                        ('Refiner Model', refiner_model_name),
-                        ('Refiner Switch', refiner_switch),
-                        ('Sampler', sampler_name),
-                        ('Scheduler', scheduler_name),
-                        ('Seed', task['task_seed']),
-                    ]
+                            modules.patch.adm_scaler_end)),
+                        'Base Model': base_model_name,
+                        'Refiner Model': refiner_model_name,
+                        'Refiner Switch': refiner_switch,
+                        'Sampler': sampler_name,
+                        'Scheduler': scheduler_name,
+                        'Seed': task['task_seed'],
+                        'Version': fooocus_version.version
+                    }
                     for li, (n, w) in enumerate(loras):
                         if n != 'None':
-                            d.append((f'LoRA {li + 1}', f'{n} : {w}'))
-                    d.append(('Version', 'v' + fooocus_version.version))
-                    is_nsfw, target_image, logged_image_path = log(x, d, async_task=async_task)
-                    img_paths.append(logged_image_path)
+                            meta[f'LoRA {li + 1}'] = f'{n} : {w}'
+
+                    is_nsfw, target_image, logged_image_path = log(x, meta, async_task=async_task)
+                    img_paths.append(str(logged_image_path))
                     target_images.append(target_image)
                     is_nsfw_list.append(is_nsfw)
 
@@ -849,18 +872,349 @@ def worker():
                     img_paths=img_paths,
                     is_nsfw=is_nsfw_list,
                 )
-            except ldm_patched.modules.model_management.InterruptProcessingException as e:
+            except InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
-                    print('User skipped')
-                    async_task.yields.append(['skipped', (100 / len(tasks) * (current_task_id + 1), "User skipped")])
+                    print('Task skipped')
+                    async_task.yields.append(['skipped', (100 / len(tasks) * (current_task_id + 1), "Task skipped")])
                     continue
                 else:
-                    print('User stopped')
-                    async_task.yields.append(['stopped', "User stopped"])
+                    print('Task stopped')
+                    async_task.yields.append(['stopped', "Task stopped"])
                     break
+            finally:
+                shared.state["preview_grid"] = None
+                shared.state["preview_total"] = 0
+                shared.state["preview_count"] = 0
 
             execution_time = time.perf_counter() - execution_start_time
             print(f'Generating and saving time: {execution_time:.2f} seconds')
+
+        return
+
+
+    def focus_handler(async_task):
+        focus_handler(async_task)
+        build_image_wall(async_task)
+        pipeline.prepare_text_encoder(async_call=True)
+
+
+    @torch.no_grad()
+    @torch.inference_mode()
+    def ruined_handler(async_task):
+
+        args = async_task.args
+        args.reverse()
+
+        gen_data = {}
+
+        if advanced_parameters.overwrite_step > 0:
+            gen_data["custom_steps"] = advanced_parameters.overwrite_step
+        gen_data["sampler_name"] = advanced_parameters.sampler_name
+        gen_data["scheduler"] = advanced_parameters.scheduler_name
+        gen_data["clip_skip"] = 1
+        gen_data["custom_width"] = advanced_parameters.overwrite_width
+        gen_data["custom_height"] = advanced_parameters.overwrite_height
+
+
+        gen_data["prompt"] = args.pop()
+        gen_data["negative"] = args.pop()
+        gen_data["style_selection"] = args.pop()
+        gen_data["performance_selection"] = args.pop()
+        gen_data["aspect_ratios_selection"] = args.pop()
+        gen_data["image_number"] = args.pop()
+        gen_data["seed"] = args.pop()
+        gen_data["_sharpness"] = args.pop()
+        if task.task_type != 'flux' and int(gen_data["_sharpness"]) >= 1 and int(gen_data["_sharpness"]) <= 5:
+            gen_data["clip_skip"] = int(gen_data["_sharpness"])
+        gen_data["cfg"] = args.pop()
+        gen_data["base_model_name"] = args.pop()
+        gen_data["_refiner_model_name"] = args.pop()
+        gen_data["_refiner_switch"] = args.pop()
+        gen_data["loras"] = [(str(args.pop()), float(args.pop())) for _ in range(5)]
+        gen_data["_input_image_checkbox"] = args.pop()
+        gen_data["_current_tab"] = args.pop()
+        gen_data["_uov_method"] = args.pop()
+        gen_data["_uov_input_image"] = args.pop()
+        gen_data["_outpaint_selections"] = args.pop()
+        gen_data["_inpaint_input_image"] = args.pop()
+        gen_data["_inpaint_additional_prompt"] = args.pop()
+        gen_data["_inpaint_mask_image_upload"] = args.pop()
+
+        gen_data["cn_selection"] = gen_data["cn_type"] = "None"
+        if gen_data["_input_image_checkbox"] and gen_data["_current_tab"] == "uov" and gen_data["_uov_input_image"]:
+            if "vary" in gen_data["_uov_method"].lower():
+                gen_data["cn_selection"] = gen_data["cn_type"] = "img2img"
+                gen_data["start"] = 0.06
+                gen_data["denoise"] = 0.64
+                gen_data["input_image"] = gen_data["_uov_input_image"]
+            elif "upscale" in gen_data["_uov_method"].lower():
+                gen_data["cn_selection"] = gen_data["cn_type"] = "upscale"
+                gen_data["cn_upscale"] = "4x-UltraSharp.pth"
+                gen_data["input_image"] = gen_data["_uov_input_image"]
+
+        gen_data["inpaint_toggle"] = False
+        gen_data["inpaint_view"] = {}
+        if gen_data["_input_image_checkbox"] and gen_data["_current_tab"] == "inpaint" and gen_data["_inpaint_input_image"] and gen_data["_inpaint_mask_image_upload"]:
+            gen_data["inpaint_toggle"] = True
+            gen_data["inpaint_view"]["mask"] = gen_data["_inpaint_mask_image_upload"]
+            gen_data["inpaint_view"]["image"] = gen_data["_inpaint_input_image"]
+
+        if gen_data["_input_image_checkbox"] and gen_data["_current_tab"] == "ip":
+            for _ in range(4):
+                cn_img = args.pop()
+                cn_stop = args.pop()
+                cn_weight = args.pop()
+                cn_type = args.pop()
+                if cn_img is not None:
+                    gen_data["cn_selection"] = gen_data["cn_type"] = cn_type
+                    if cn_type.lower() == 'canny':
+                        gen_data["cn_edge_low"] = 0.2
+                        gen_data["cn_edge_high"] = 0.8
+                    gen_data["cn_start"] = 0.0
+                    gen_data["cn_stop"] = cn_stop
+                    gen_data["cn_strength"] = cn_weight
+                    gen_data["input_image"] = cn_img
+
+
+        gen_data["generate_forever"] = False
+        gen_data["obp_assume_direct_control"] = False
+        #gen_data["OBP_preset"]
+        #gen_data["obp_insanitylevel"]
+        #gen_data["obp_subject"]
+        #gen_data["obp_artist"]
+        #gen_data["obp_chosensubjectsubtypeobject"]
+        #gen_data["obp_chosensubjectsubtypehumanoid"]
+        #gen_data["obp_chosensubjectsubtypeconcept"]
+        #gen_data["obp_chosengender"]
+        #gen_data["obp_imagetype"]
+        #gen_data["obp_imagemodechance"]
+        #gen_data["obp_givensubject"]
+        #gen_data["obp_smartsubject"]
+        #gen_data["obp_givenoutfit"]
+        #gen_data["obp_prefixprompt"]
+        #gen_data["obp_suffixprompt"]
+        #gen_data["obp_giventypeofimage"]
+        #gen_data["obp_antistring"]
+        #gen_data["OBP_modeltype"]
+        #gen_data["OBP_promptenhance"]
+
+        if gen_data["negative"]:
+            gen_data["auto_negative"] = False
+        else:
+            gen_data["auto_negative"] = True
+
+        gen_data["lora_keywords"] = ""
+        model_info = all_models.get_model(gen_data["base_model_name"])
+        assert model_info is not None, f"Model {gen_data['base_model_name']} not found"
+
+        gen_data = process_metadata(gen_data)
+
+        shared.state["preview_grid"] = None
+        shared.state["preview_total"] = max(gen_data["image_number"], 1)
+        shared.state["preview_count"] = 0
+
+        ruined_pipeline = modules.pipelines.update(gen_data)
+        if ruined_pipeline == None:
+            print(f"ERROR: No pipeline")
+            return
+        if isinstance(ruined_pipeline, modules.pipelines.NoPipeLine):
+            print(f"ERROR: No pipeline")
+            return
+
+        try:
+            # See if ruined_pipeline wants to pre-parse gen_data
+            _parse_gen_data = getattr(ruined_pipeline, "parse_gen_data", None)
+            if callable(_parse_gen_data):
+                gen_data = ruined_pipeline.parse_gen_data(gen_data)
+        except:
+            pass
+
+        image_number = gen_data["image_number"]
+
+        loras = gen_data["loras"]
+
+        parsed_loras, pos_stripped, neg_stripped = parse_loras(
+            gen_data["prompt"], gen_data["negative"]
+        )
+        loras.extend(parsed_loras)
+
+        progressbar(async_task, 1, f"Loading base model: {gen_data['base_model_name']}")
+        _load_base_model = getattr(ruined_pipeline, "load_base_model", None)
+        if not callable(_load_base_model):
+            print(f"ERROR: No load_base_model for pipeline")
+            return
+        gen_data["modelhash"] = ruined_pipeline.load_base_model(gen_data["base_model_name"])
+        progressbar(async_task, 1, "Loading LoRA models ...")
+        ruined_pipeline.load_loras(loras)
+
+        if (
+            gen_data["performance_selection"]
+            == shared.performance_settings.CUSTOM_PERFORMANCE
+        ):
+            steps = gen_data["custom_steps"]
+        else:
+            perf_options = shared.performance_settings.get_perf_options(
+                gen_data["performance_selection"]
+            ).copy()
+            perf_options.update(gen_data)
+            gen_data = perf_options
+
+        # TODO: Put this in config
+        if model_info.sha256.lower() == "ead426278b49030e9da5df862994f25ce94ab2ee4df38b556ddddb3db093bf72":
+            if gen_data["performance_selection"].lower() == "speed":
+                gen_data["custom_steps"] = 10
+            elif gen_data["performance_selection"].lower() == "quality":
+                gen_data["custom_steps"] = 20
+
+        steps = gen_data["custom_steps"]
+
+        if (
+            gen_data["aspect_ratios_selection"]
+            == shared.resolution_settings.CUSTOM_RESOLUTION
+        ):
+            width, height = (gen_data["custom_width"], gen_data["custom_height"])
+        else:
+            if gen_data["aspect_ratios_selection"] in shared.resolution_settings.aspect_ratios:
+                width, height = shared.resolution_settings.aspect_ratios[
+                    gen_data["aspect_ratios_selection"]
+                ]
+            else:
+                a, b = gen_data["aspect_ratios_selection"].replace('x', ' ').split(' ')[:2]
+                width, height = int(a), int(b)
+
+        if "width" in gen_data:
+            width = gen_data["width"]
+        if "height" in gen_data:
+            height = gen_data["height"]
+
+        if gen_data.get("cn_selection", "").lower() == "img2img" or gen_data.get("cn_type", "").lower() == "img2img":
+            if gen_data["input_image"]:
+                width = gen_data["input_image"].width
+                height = gen_data["input_image"].height
+            else:
+                print(f"WARNING: CheatCode selected but no Input image selected. Ignoring PowerUp!")
+                gen_data["cn_selection"] = "None"
+                gen_data["cn_type"] = "None"
+
+        seed = gen_data["seed"]
+
+        max_seed = 2**32
+        if not isinstance(seed, int) or seed < 0:
+            seed = random.randint(0, max_seed)
+        seed = seed % max_seed
+
+        all_steps = steps * max(image_number, 1)
+
+        def callback(step, x0, x, total_steps, y):
+
+            if processing_interrupted():
+                shared.state["interrupted"] = True
+                throw_exception_if_processing_interrupted()
+
+            if isinstance(y, Image.Image):
+                y = np.array(y)
+
+            # If we only generate 1 image, skip the last preview
+            if (
+                (not gen_data["generate_forever"])
+                and shared.state["preview_total"] == 1
+                and steps == step
+            ):
+                return
+
+            done_steps = i * steps + step
+
+            async_task.yields.append([
+                "preview",
+                (
+                    int(
+                        100
+                        * (done_steps / all_steps)
+                    ),
+                    f'Step {step}/{total_steps} in the {i + 1}-th Sampling',
+                    y
+                )
+            ])
+
+        for i in range(max(image_number, 1)):
+            p_txt, n_txt = process_prompt(
+                gen_data["style_selection"], pos_stripped, neg_stripped, gen_data
+            )
+            start_step = 0
+            denoise = None
+            with TimeIt("Pipeline process"):
+                try:
+                    imgs = ruined_pipeline.process(
+                        p_txt,
+                        n_txt,
+                        gen_data.get("input_image", None),
+                        modules.controlnet.get_settings(gen_data),
+                        gen_data.get("main_view", None),
+                        steps,
+                        width,
+                        height,
+                        seed,
+                        start_step,
+                        denoise,
+                        gen_data["cfg"],
+                        gen_data["sampler_name"],
+                        gen_data["scheduler"],
+                        gen_data["clip_skip"],
+                        callback=callback,
+                        gen_data=gen_data,
+                        progressbar=functools.partial(progressbar, async_task),
+                    )
+
+                    img_paths = []
+                    target_images = []
+                    is_nsfw_list = []
+                    for x in imgs:
+                        meta = {
+                            "Prompt": p_txt,
+                            "Negative": n_txt,
+                            "steps": steps,
+                            "cfg": gen_data["cfg"],
+                            "width": width,
+                            "height": height,
+                            "seed": seed,
+                            "sampler_name": gen_data["sampler_name"],
+                            "scheduler": gen_data["scheduler"],
+                            "base_model_name": gen_data["base_model_name"],
+                            "base_model_hash": model_info.sha256,
+                            "loras": [{
+                                "name": lora[0],
+                                "weight": lora[1],
+                                "hash": all_models.get_model(lora[0]).sha256 if all_models.get_model(lora[0]) else None,
+                            } for lora in loras],
+                            "start_step": start_step,
+                            "denoise": denoise,
+                            "clip_skip": gen_data["clip_skip"],
+                            "Version": fooocus_version.version,
+                        }
+                        is_nsfw, target_image, logged_image_path = log(x, meta, async_task=async_task)
+                        img_paths.append(str(logged_image_path))
+                        target_images.append(target_image)
+                        is_nsfw_list.append(is_nsfw)
+
+                        shared.state["preview_count"] += 1
+
+                    seed += 1
+                    yield_result(
+                        async_task,
+                        target_images,
+                        do_not_show_finished_images=(i == max(image_number, 1) - 1),
+                        img_paths=img_paths,
+                        is_nsfw=is_nsfw_list,
+                    )
+                except InterruptProcessingException as e:
+                    if shared.last_stop == 'skip':
+                        print('User skipped')
+                        async_task.yields.append(['skipped', (100 / max(image_number, 1) * (i + 1), "User skipped")])
+                        continue
+                    else:
+                        print('User stopped')
+                        async_task.yields.append(['stopped', "User stopped"])
+                        break
 
         return
 
@@ -872,9 +1226,12 @@ def worker():
             try:
                 running_task = task
                 script_callbacks.before_task_callback(task.task_id)
-                handler(task)
-                build_image_wall(task)
-                pipeline.prepare_text_encoder(async_call=True)
+                if task.task_type == 'sd3' or task.task_type == 'flux':
+                    pipeline.clear_pipeline()
+                    ruined_handler(task)
+                else:
+                    modules.pipelines.clear_pipeline()
+                    handler(task)
                 task.yields.append(['finish', task.results])
             except Exception as e:
                 traceback.print_exc()
@@ -883,6 +1240,10 @@ def worker():
                 finished_tasks.append(task)
                 script_callbacks.after_task_callback(task.task_id)
                 running_task = None
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
 
 
 def start():

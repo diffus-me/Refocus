@@ -1,114 +1,142 @@
 [
-    {
-        "model_type": "checkpoint",
-        "name": "juggernautXL_version6Rundiffusion.safetensors",
-        "sha256": "1fe6c7ec54c786040cdabc7b4e89720069d97096922e20d01f13e7764412b47f",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_version6Rundiffusion.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "juggernautXL_v8Rundiffusion.safetensors",
-        "sha256": "aeb7e9e6897a1e58b10494bd989d001e3d4bc9b634633cd7b559838f612c2867",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_v8Rundiffusion.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "lora",
-        "name": "sd_xl_offset_example-lora_1.0.safetensors",
-        "sha256": "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_offset_example-lora_1.0.safetensors",
-        "base": null
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "bluePencilXL_v050.safetensors",
-        "sha256": "8c462a80f4b5291b24feb624d67248bd09f71f9074d7014d8ad7901b120bdcc7",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/bluePencilXL_v050.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "animaPencilXL_v100.safetensors",
-        "sha256": "7ed8da12d980f7ec628af7366ca1d9a85b519793e0cd5c66e05f3bc2a8417279",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/animaPencilXL_v100.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "DreamShaper_8_pruned.safetensors",
-        "sha256": "879db523c30d3b9017143d56705015e15a2cb5628762c11d086fed9538abd7fd",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/DreamShaper_8_pruned.safetensors",
-        "base": "SDV1"
-    },
-    {
-        "model_type": "embedding",
-        "name": "unaestheticXLv31.safetensors",
-        "sha256": "75fa9a0423a19c56ccaaea3b985b4999408b530585eca3f6108685c0007e5b2e",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/unaestheticXLv31.safetensors",
-        "base": null
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "realisticStockPhoto_v10.safetensors",
-        "sha256": "2d44ce378ddcc922769df4effe74dae3370a887ea9897093e1f5fbdc50b67a02",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v10.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "realisticStockPhoto_v20.safetensors",
-        "sha256": "f99f3dec38a09b4834a4a073bdc45aabd42b422b4d327f5e8001afcb5ffb5f45",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v20.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "lora",
-        "name": "SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
-        "sha256": "bc6db9d8f167adf51c2ad9280cccaff108fc8a6d6e8cd654e3afcfdbf13e1048",
-        "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
-        "base": null
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "sd_xl_base_1.0_0.9vae.safetensors",
-        "sha256": "e6bb9ea85bbf7bf6478a7c6d18b71246f22e95d41bcdd80ed40aa212c33cfeff",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0_0.9vae.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "sd_xl_refiner_1.0_0.9vae.safetensors",
-        "sha256": "8d0ce6c016004cbdacd50f937dad381d8c396628d621a7f97191470532780164",
-        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-refiner-1.0/resolve/main/sd_xl_refiner_1.0_0.9vae.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "turbovisionxlSuperFastXLBasedOnNew_tvxlV431Bakedvae.safetensors",
-        "sha256": "b62ddba1a60d4ed5d7d1185398ff8dac70347ee749ac7811491f849bef48a77a",
-        "url": "https://civitai.com/api/download/models/273102?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "sdxl_lightning_4step.safetensors",
-        "sha256": "e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490",
-        "url": "https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "checkpoint",
-        "name": "dreamshaperXL_lightningDPMSDE.safetensors",
-        "sha256": "fdbe56354b8f876b736f24d3ad867ecd4140c019f57642ec8ddd878088d44f64",
-        "url": "https://civitai.com/api/download/models/354657?type=Model&format=SafeTensor&size=full&fp=fp16",
-        "base": "SDXL"
-    },
-    {
-        "model_type": "lora",
-        "name": "sdxl_lcm_lora.safetensors",
-        "sha256": "c3dbf7eb26dd00ae6b6b95da69be9f1cb95a3b2c5bcf9be82323227a19b91329",
-        "url": "https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors",
-        "base": null
-    }
+  {
+    "model_type": "checkpoint",
+    "name": "juggernautXL_version6Rundiffusion.safetensors",
+    "sha256": "1fe6c7ec54c786040cdabc7b4e89720069d97096922e20d01f13e7764412b47f",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_version6Rundiffusion.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "flux1-schnell-fp8.safetensors",
+    "sha256": "ead426278b49030e9da5df862994f25ce94ab2ee4df38b556ddddb3db093bf72",
+    "url": "https://huggingface.co/Comfy-Org/flux1-schnell/blob/main/flux1-schnell-fp8.safetensors",
+    "base": "Flux"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "sd3_medium_incl_clips.safetensors",
+    "sha256": "3bb7f21bc5fb450220f4eb78a2f276b15422309d5166a4bdeb8c3b763a3a0581",
+    "url": "https://cdn-lfs-us-1.huggingface.co/repos/e2/a1/e2a1fa97e711ee8a522ec09a542b1577904208d820521111408766a594041429/3bb7f21bc5fb450220f4eb78a2f276b15422309d5166a4bdeb8c3b763a3a0581?response-content-disposition=attachment%3B+filename*%3DUTF-8%27%27sd3_medium_incl_clips.safetensors%3B+filename%3D%22sd3_medium_incl_clips.safetensors%22%3B&Expires=1724083799&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTcyNDA4Mzc5OX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2RuLWxmcy11cy0xLmh1Z2dpbmdmYWNlLmNvL3JlcG9zL2UyL2ExL2UyYTFmYTk3ZTcxMWVlOGE1MjJlYzA5YTU0MmIxNTc3OTA0MjA4ZDgyMDUyMTExMTQwODc2NmE1OTQwNDE0MjkvM2JiN2YyMWJjNWZiNDUwMjIwZjRlYjc4YTJmMjc2YjE1NDIyMzA5ZDUxNjZhNGJkZWI4YzNiNzYzYTNhMDU4MT9yZXNwb25zZS1jb250ZW50LWRpc3Bvc2l0aW9uPSoifV19&Signature=mb34aaaH5-mGpv%7EOJhJajSFNqLICWET0pDH30y7Rc5CXyEknyvEGYdsTxUlc7VqcMKamM2kFdHFNm7DumjWry816b6TzsB%7EuBe7LeFLXfVhVyw1l3XjuV3EeXGmKSTW9CH7rJCQ4%7ETjZ6Hnz4sE2pqG83mowmwJa4%7EM7pD%7EhfMoXpMfRn02nksXy1Jp9x%7ECmehWYwveK681-LFLzfeX3n6eoTD96Uqs9Llw5KxRaSF1P45jdSQWz--9SEOFCEqVY85sWL6RbDMvCT0knISmMptSZBA0NivBZDga5v%7EOBUZmjxnqtx4ht6DCyWIywHXWWd0HPBhmmnRbxcwohhkvOzA__&Key-Pair-Id=K24J24Z295AEI9",
+    "base": "SD3"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "juggernautXL_v8Rundiffusion.safetensors",
+    "sha256": "aeb7e9e6897a1e58b10494bd989d001e3d4bc9b634633cd7b559838f612c2867",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/juggernautXL_v8Rundiffusion.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "lora",
+    "name": "sd_xl_offset_example-lora_1.0.safetensors",
+    "sha256": "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f",
+    "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_offset_example-lora_1.0.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "bluePencilXL_v050.safetensors",
+    "sha256": "8c462a80f4b5291b24feb624d67248bd09f71f9074d7014d8ad7901b120bdcc7",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/bluePencilXL_v050.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "animaPencilXL_v100.safetensors",
+    "sha256": "7ed8da12d980f7ec628af7366ca1d9a85b519793e0cd5c66e05f3bc2a8417279",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/animaPencilXL_v100.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "DreamShaper_8_pruned.safetensors",
+    "sha256": "879db523c30d3b9017143d56705015e15a2cb5628762c11d086fed9538abd7fd",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/DreamShaper_8_pruned.safetensors",
+    "base": "SDV1"
+  },
+  {
+    "model_type": "embedding",
+    "name": "unaestheticXLv31.safetensors",
+    "sha256": "75fa9a0423a19c56ccaaea3b985b4999408b530585eca3f6108685c0007e5b2e",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/unaestheticXLv31.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "realisticStockPhoto_v10.safetensors",
+    "sha256": "2d44ce378ddcc922769df4effe74dae3370a887ea9897093e1f5fbdc50b67a02",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v10.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "realisticStockPhoto_v20.safetensors",
+    "sha256": "f99f3dec38a09b4834a4a073bdc45aabd42b422b4d327f5e8001afcb5ffb5f45",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/realisticStockPhoto_v20.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "lora",
+    "name": "SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
+    "sha256": "bc6db9d8f167adf51c2ad9280cccaff108fc8a6d6e8cd654e3afcfdbf13e1048",
+    "url": "https://huggingface.co/lllyasviel/fav_models/resolve/main/fav/SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "sd_xl_base_1.0_0.9vae.safetensors",
+    "sha256": "e6bb9ea85bbf7bf6478a7c6d18b71246f22e95d41bcdd80ed40aa212c33cfeff",
+    "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0_0.9vae.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "sd_xl_refiner_1.0_0.9vae.safetensors",
+    "sha256": "8d0ce6c016004cbdacd50f937dad381d8c396628d621a7f97191470532780164",
+    "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-refiner-1.0/resolve/main/sd_xl_refiner_1.0_0.9vae.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "turbovisionxlSuperFastXLBasedOnNew_tvxlV431Bakedvae.safetensors",
+    "sha256": "b62ddba1a60d4ed5d7d1185398ff8dac70347ee749ac7811491f849bef48a77a",
+    "url": "https://civitai.com/api/download/models/273102?type=Model&format=SafeTensor&size=pruned&fp=fp16",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "sdxl_lightning_4step.safetensors",
+    "sha256": "e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490",
+    "url": "https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "checkpoint",
+    "name": "dreamshaperXL_lightningDPMSDE.safetensors",
+    "sha256": "fdbe56354b8f876b736f24d3ad867ecd4140c019f57642ec8ddd878088d44f64",
+    "url": "https://civitai.com/api/download/models/354657?type=Model&format=SafeTensor&size=full&fp=fp16",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "lora",
+    "name": "sdxl_lcm_lora.safetensors",
+    "sha256": "c3dbf7eb26dd00ae6b6b95da69be9f1cb95a3b2c5bcf9be82323227a19b91329",
+    "url": "https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "lora",
+    "name": "lcm-lora-sdxl.safetensors",
+    "sha256": "a764e6859b6e04047cd761c08ff0cee96413a8e004c9f07707530cd776b19141",
+    "url": "https://huggingface.co/latent-consistency/lcm-lora-sdxl/resolve/main/pytorch_lora_weights.safetensors",
+    "base": "SDXL"
+  },
+  {
+    "model_type": "lora",
+    "name": "lcm-lora-ssd-1b.safetensors",
+    "sha256": "7adaaa69db6f011058a19fd1d5315fdf19ef79fcd513cdab30e173833fd5c59b",
+    "url": "https://huggingface.co/latent-consistency/lcm-lora-ssd-1b/resolve/main/pytorch_lora_weights.safetensors",
+    "base": "SSD"
+  }
 ]

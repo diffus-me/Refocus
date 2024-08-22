@@ -6,6 +6,7 @@ import urllib.parse
 
 import numpy as np
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 from modules.util import generate_temp_filename
 from modules.nsfw import nsfw_blur
 from modules import script_callbacks
@@ -25,7 +26,7 @@ def get_current_html_path(base_dir: str | None = None):
     return html_name
 
 
-def log(img, dic, async_task: "AsyncTask"):
+def log(img, meta, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
         return False, img, ""
 
@@ -41,8 +42,10 @@ def log(img, dic, async_task: "AsyncTask"):
         folder=folder, extension='png'
     )
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
+    metadata = PngInfo()
+    metadata.add_text("parameters", json.dumps(meta))
     # html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
-    pil_image.save(local_temp_filename)
+    pil_image.save(local_temp_filename, pnginfo=metadata)
     script_callbacks.image_saved_callback(
         script_callbacks.ImageSaveParams(
             image=img, filename=local_temp_filename, task_metadata=async_task.metadata

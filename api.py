@@ -14,9 +14,8 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 from functools import cache
-from typing import Annotated, Callable, Any
+from typing import Annotated, Callable, Any, Literal
 from urllib.parse import urlparse
-from modules import script_callbacks
 
 import aiofiles
 import aiofiles.os
@@ -38,11 +37,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic import BaseModel, Field
 
+from modules import script_callbacks
 import modules.advanced_parameters as advanced_parameters
 import modules.config
 import modules.flags as flags
+from modules.model_info import get_all_model_info
 import modules.style_sorter as style_sorter
 from modules.util import get_shape_ceil
 from modules import system_monitor
@@ -61,23 +62,9 @@ from modules.database import (
     unshare_an_image,
     update_focus_task_record,
 )
+from settings import settings
 
 
-class Settings(BaseSettings):
-    api_image_dir: str = "./api-outputs"
-    s3_prefix: str = "http://localhost:7865/file=./api-outputs"
-    hostname: str = ""
-    output_base_dir: str = "./"
-    binary_dir: str = "./"
-    models_dir: str = "./"
-    preset_dir: str = "./presets"
-    models_db_path: str = "./models/models_db.json"
-
-    class Config:
-        env_file = ".env"
-
-
-settings = Settings()
 database_created = False
 
 logger = logging.getLogger("uvicorn.error")
@@ -260,6 +247,7 @@ class AdvancedOptions(BaseModel):
 
 class GenerationOption(BaseModel):
     task_id: str = Field(description="Task id for generation.")
+    task_type: Literal["sdxl", "sd3", "flux"] | None = Field(description="Task type for generation.")
     prompt: str = Field(description="Prompt for generation.")
     negative_prompt: str = Field(
         default=modules.config.default_prompt_negative, description="Negative prompt for generation."
@@ -280,7 +268,9 @@ class GenerationOption(BaseModel):
     image_seed: int = Field(default=-1, description="Seed for generation. -1 means random.")
     sharpness: float = Field(
         default=modules.config.default_sample_sharpness,
-        description="Image Sharpness. Higher value means image and texture are sharper. Min 0.0, Max 30.0.",
+        description=(
+            "Image Sharpness. Higher value means image and texture are sharper. Min 0.0, Max 30.0."
+            "Use as Clip Skip in Flux and SD3 mode. Min 1, max 5."),
     )
     guidance_scale: float = Field(
         default=modules.config.default_cfg_scale,
@@ -317,7 +307,7 @@ class GenerationOption(BaseModel):
     )
 
     def get_target_resolution(self) -> tuple[int, int]:
-        width, height = self.aspect_ratios_selection.replace("×", " ").split(" ")[:2]
+        width, height = self.aspect_ratios_selection.replace("x", " ").split(" ")[:2]
 
         if self.advanced_options.overwrite_width > 0:
             width = self.advanced_options.overwrite_width
@@ -847,9 +837,23 @@ async def list_presets(path: str) -> list[str]:
 
 
 @cache
-def get_preset(preset: str) -> dict[str, Any]:
+def get_preset(preset: str, task_type: str | None = None) -> dict[str, Any]:
     config_dict = copy.deepcopy(modules.config.config_dict)
-    return read_preset_and_update_config(preset, config_dict, settings.preset_dir)
+    config_dict = read_preset_and_update_config(preset, config_dict, settings.preset_dir)
+    if task_type and task_type.lower() not in config_dict.get("task_type", "").lower():
+        logger.error(f"Preset {preset} is for {config_dict.get('task_type', '')} tasks, not {task_type} tasks.")
+        raise HTTPException(status_code=400, detail=f"Preset {preset} is designed for {config_dict.get('task_type', '')} tasks.")
+    return config_dict
+
+
+async def get_presets_for_task_types(path: str, task_type: Literal["sdxl", "sd3", "flux"] = "sdxl"):
+    presets = await list_presets(path)
+    filtered_presets = []
+    for preset in presets:
+        config_dict = await asyncio.to_thread(get_preset, preset)
+        if task_type.lower() in config_dict.get("task_type", "").lower():
+            filtered_presets.append(preset)
+    return filtered_presets
 
 
 def create_api(
@@ -861,6 +865,8 @@ def create_api(
     skip_clicked: Callable,
     trigger_describe: Callable,
 ) -> FastAPI:
+    from modules.sdxl_pipeline import get_all_samplers, get_all_schedulers
+    from modules.sdxl_ruined_styles import load_styles
     app.mount("/api/focus/static", StaticFiles(directory="static"), name="static")
     app.mount("/api/focus/styles", StaticFiles(directory="sdxl_styles"), name="styles")
 
@@ -1007,6 +1013,7 @@ def create_api(
                                 base_dir=output_dir,
                                 task_id=generation_option.task_id,
                                 metadata=request_headers,
+                                task_type=generation_option.task_type,
                             ):
                                 previous_status = await update_database(
                                     progress, previous_status, user_id, generation_option
@@ -1139,16 +1146,109 @@ def create_api(
                 )
             return result
 
+    def get_checkpoints_for_task_type(task_type: Literal["sdxl", "sd3", "flux"] = "sdxl"):
+        all_model_info = get_all_model_info()
+        return [
+            model_name for model_name, model_info in all_model_info.checkpoint_models.items()
+            if model_info.base is not None and task_type.lower() in model_info.base.lower()
+        ]
+
+    def get_loras_for_task_type(task_type: Literal["sdxl", "sd3", "flux"] = "sdxl"):
+        all_model_info = get_all_model_info()
+        return ["None"] + [
+            model_name for model_name, model_info in all_model_info.lora_models.items()
+            if model_info.base is not None and task_type.lower() in model_info.base.lower()
+        ]
+
     @app.get("/api/focus/default_options", response_model=DefaultOptions, response_class=JSONResponse)
     async def get_default_options(
-        request: Request, preset: str = "default", user_id: Annotated[str | None, Header()] = "local"
+        request: Request,
+        preset: str = "default",
+        task_type: Literal["sdxl", "sd3", "flux"] = "sdxl",
+        user_id: Annotated[str | None, Header()] = "local"
     ):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
-        config_dict = await asyncio.to_thread(get_preset, preset)
+        available_presets = await get_presets_for_task_types(settings.preset_dir, task_type)
+        config_dict = await asyncio.to_thread(get_preset, preset, task_type)
+        if task_type == "sd3" or task_type == "flux":
+            lora_options = [
+                LoraOptions(
+                    lora_name=OptionList(default=lora_name, options=get_loras_for_task_type(task_type)),
+                    lora_weight=lora_weight,
+                )
+                for lora_name, lora_weight in config_dict.get("default_loras", [])
+            ]
+            performance = "Speed"
+            performance_selections = ["Speed", "Quality"]
+            if performance not in performance_selections:
+                performance_selections.append(performance)
+            return DefaultOptions(
+                hostname=get_hostname(request, settings.hostname),
+                performances=OptionList(
+                    default=performance,
+                    options=performance_selections,
+                ),
+                aspect_ratios=OptionList(
+                    default=convert_ratio(config_dict.get("default_aspect_ratio", modules.config.default_aspect_ratio)),
+                    options=[
+                        convert_ratio(x)
+                        for x in config_dict.get("available_aspect_ratios", modules.config.available_aspect_ratios)
+                    ],
+                ),
+                styles=StyleOptions(
+                    default_list=list(config_dict.get("default_styles", [])),
+                    options=[
+                        StyleOption(
+                            style_name=style_name,
+                            style_preview="")
+                        for style_name in load_styles()],
+                ),
+                base_models=OptionList(
+                    default=config_dict.get("default_model"),
+                    options=config_dict.get("model_filenames", get_checkpoints_for_task_type(task_type)),
+                ),
+                refiner_models=OptionList(
+                    default=config_dict.get("default_refiner", modules.config.default_refiner_model_name),
+                    options=["None"] + config_dict.get("refiner_filenames", get_checkpoints_for_task_type(task_type)),
+                ),
+                refiner_switch=config_dict.get("default_refiner_switch", 1),
+                loras=lora_options,
+                uovs=OptionList(default=flags.disabled, options=[flags.disabled]),
+                ip_types=OptionList(default="", options=[]),
+                ip_default_options={},
+                num_image_prompts=0,
+                content_types=OptionList(
+                    default="", options=[]
+                ),
+                cfg_scale=config_dict.get("default_cfg_scale", modules.config.default_cfg_scale),
+                sample_sharpness=config_dict.get("default_clip_skip", 1.0),
+                sampler=OptionList(
+                    default=config_dict.get("default_sampler", modules.config.default_sampler), options=get_all_samplers()
+                ),
+                scheduler=OptionList(
+                    default=config_dict.get("default_scheduler", modules.config.default_scheduler),
+                    options=get_all_schedulers(),
+                ),
+                prompt=config_dict.get("default_prompt", modules.config.default_prompt),
+                negative_prompt=config_dict.get("default_prompt_negative", modules.config.default_prompt_negative),
+                steps=config_dict.get("default_steps", None),
+                presets=OptionList(
+                    default=preset if preset in available_presets else available_presets[0], options=available_presets),
+                sd3=DefaultSD3Options(
+                    base_models=OptionList(
+                        default=modules.config.sd3_config["baseModel"],
+                        options=modules.config.sd3_config["baseModels"],
+                    ),
+                    aspect_ratios=OptionList(
+                        default=modules.config.sd3_config["aspectRatio"],
+                        options=modules.config.sd3_config["aspectRatios"],
+                    ),
+                )
+            )
         lora_options = [
             LoraOptions(
-                lora_name=OptionList(default=lora_name, options=["None"] + modules.config.lora_filenames),
+                lora_name=OptionList(default=lora_name, options=get_loras_for_task_type(task_type)),
                 lora_weight=lora_weight,
             )
             for lora_name, lora_weight in config_dict.get("default_loras", modules.config.default_loras)
@@ -1180,11 +1280,11 @@ def create_api(
             ),
             base_models=OptionList(
                 default=config_dict.get("default_model", modules.config.default_base_model_name),
-                options=config_dict.get("model_filenames", modules.config.model_filenames),
+                options=config_dict.get("model_filenames", get_checkpoints_for_task_type(task_type)),
             ),
             refiner_models=OptionList(
                 default=config_dict.get("default_refiner", modules.config.default_refiner_model_name),
-                options=["None"] + config_dict.get("refiner_filenames", modules.config.refiner_model_filenames),
+                options=["None"] + config_dict.get("refiner_filenames", get_checkpoints_for_task_type(task_type)),
             ),
             refiner_switch=config_dict.get("default_refiner_switch", modules.config.default_refiner_switch),
             loras=lora_options,
@@ -1212,7 +1312,7 @@ def create_api(
             prompt=config_dict.get("default_prompt", modules.config.default_prompt),
             negative_prompt=config_dict.get("default_prompt_negative", modules.config.default_prompt_negative),
             steps=config_dict.get("default_steps", None),
-            presets=OptionList(default="default", options=await list_presets(settings.preset_dir)),
+            presets=OptionList(default=preset if preset in available_presets else "default", options=available_presets),
             sd3=DefaultSD3Options(
                 base_models=OptionList(
                     default=modules.config.sd3_config["baseModel"],
@@ -1296,19 +1396,24 @@ def create_api(
             return JSONResponse(status_code=500, content={"message": str(e)})
 
     @app.get("/ui", response_class=HTMLResponse)
-    async def vue_ui(request: Request):
+    async def vue_ui(
+        request: Request,
+        user_id: Annotated[str | None, Header()] = None,
+    ):
         global database_created
         if not database_created:
             await create_tables()
             database_created = True
 
+        encoded_user_id = ""
+        if user_id:
+            encoded_user_id = base64.b64encode(user_id.encode('utf-8')).decode('utf-8')
+
         return templates.TemplateResponse(
             "ui.html",
             {
                 "request": request,
-                "base64_encoded_user_id": base64.b64encode(
-                    request.headers["user-id"].encode('utf-8')
-                ).decode('utf-8'),
+                "base64_encoded_user_id": encoded_user_id,
                 "user_tier": request.headers["user-tier"],
                 "js_version": time.time(),
                 "app_version": os.path.getmtime("static/js/app.js"),
@@ -1426,10 +1531,30 @@ def _get_consume_args(config: GenerationOption) -> tuple[str, dict[str, Any]]:
         return args
 
     width, height = config.get_target_resolution()
-    return "fooocus", {
-        "width": width,
-        "height": height,
-        "steps_coefficient": config.get_steps_coefficient(),
-        "ip_ctrls": 0,
-        "image_number": config.image_number,
-    }
+    if config.task_type == "flux":
+        return "fooocus.flux", {
+            "width": width,
+            "height": height,
+            "steps_coefficient": config.get_steps_coefficient(),
+            "ip_ctrls": 0,
+            "image_number": config.image_number,
+            "ratio": 2.0,
+        }
+    elif config.task_type == "sd3":
+        return "fooocus.sd3", {
+            "width": width,
+            "height": height,
+            "steps_coefficient": config.get_steps_coefficient(),
+            "ip_ctrls": 0,
+            "image_number": config.image_number,
+            "ratio": 1.5,
+        }
+    else:
+        return "fooocus", {
+            "width": width,
+            "height": height,
+            "steps_coefficient": config.get_steps_coefficient(),
+            "ip_ctrls": 0,
+            "image_number": config.image_number,
+            "ratio": 1.0,
+        }

@@ -1,0 +1,2 @@
+You can replace the model thumbnails from Civitai with your own images. Look in your models folder.
+Keywords for LoRAs are retrieved from Civitai. Use the "LoRA keywords" style to automatically add them to you prompt.

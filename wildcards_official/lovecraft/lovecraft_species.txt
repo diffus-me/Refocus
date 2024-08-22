@@ -1,0 +1,10 @@
+humanoid
+abomination
+aberration
+monstrosity
+horror
+entity
+being
+creature
+spawn
+fiend

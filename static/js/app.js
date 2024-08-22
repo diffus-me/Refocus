@@ -3,7 +3,7 @@ const { createVuetify } = Vuetify;
 
 let notifierGlobalOptions = {
   position: "bottom-right",
-  icons: {enabled: false},
+  icons: { enabled: false },
   minDurations: {
     async: 30,
     "async-block": 30,
@@ -78,6 +78,7 @@ createApp({
       selectedLoraWeights: [],
       guidanceScale: 4.0,
       imageSharpness: 2.0,
+      clipSkip: 1,
       defaultOptions: {},
       runningTaskId: "",
       runningTaskStatus: "",
@@ -155,6 +156,8 @@ createApp({
         sai: "pink",
         turbo: "amber",
         lighting: "blue-accent-3",
+        sd3: "#00ff84",
+        flux: "#f5ce62",
       },
       selectedSampler: "dpmpp_2m_sde_gpu",
       availableSamplers: [],
@@ -202,6 +205,11 @@ createApp({
       },
       userOrderInformation: null,
       _featurePermissions: null,
+      taskType: "sdxl",
+      flux: {
+        background: "background: linear-gradient(to right, #f5ce62, #e43603);",
+        textColor: "#ffffff",
+      },
       sd3: {
         enabled: false,
         baseModel: "",
@@ -214,12 +222,31 @@ createApp({
           discount: 0,
           imageNumber: 2,
         },
-        background: "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
+        background:
+          "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
         textColor: "#0c5536",
-      }
+      },
     };
   },
   methods: {
+    getGenerateButtonColor() {
+      if (this.sd3.enabled) {
+        return this.sd3.background;
+      } else if (this.taskType === "flux") {
+        return this.flux.background;
+      } else {
+        return "";
+      }
+    },
+    getGenerateButtonTextColor() {
+      if (this.sd3.enabled) {
+        return this.sd3.textColor;
+      } else if (this.taskType === "flux") {
+        return this.flux.textColor;
+      } else {
+        return "#5a3cff";
+      }
+    },
     startIntroJS(force = false) {
       const cookie_key = "_fooocus_introjs_showed";
       if (!force && window.Cookies.get(cookie_key)) {
@@ -262,7 +289,7 @@ createApp({
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -306,7 +333,7 @@ createApp({
     },
     async checkSafetyAgreement() {
       if (!this.userOrderInformation) {
-          await this.getUserOrderInformation();
+        await this.getUserOrderInformation();
       }
       const tier = this.userOrderInformation.tier;
       const permissions = await this.getFeaturePermissions();
@@ -341,7 +368,6 @@ createApp({
         }
 
         return false;
-
       } finally {
         this.safetyPopup.isAgreed = false;
         this.safetyPopup.checkboxA = false;
@@ -349,7 +375,7 @@ createApp({
       }
     },
     async getSubscribeURL() {
-      await this.getUserOrderInformation()
+      await this.getUserOrderInformation();
       const price_id = this.userOrderInformation.price_id;
       if (!price_id) {
         return null;
@@ -427,7 +453,7 @@ createApp({
 
           const permissions = await this.getFeaturePermissions();
 
-          await this.getUserOrderInformation()
+          await this.getUserOrderInformation();
           const tier = this.userOrderInformation.tier;
 
           const current_limit = permissions.limits[tier];
@@ -449,7 +475,9 @@ createApp({
             message += " Upgrade to:";
             message += "<ul style='list-style: inside'>";
             for (let limit of higher_limits) {
-              message += `<li><b>${limit.tier}</b> to run up to ${limit.max_concurrent_tasks} \
+              message += `<li><b>${limit.tier}</b> to run up to ${
+                limit.max_concurrent_tasks
+              } \
                 ${getUnit(limit.max_concurrent_tasks)} simultaneously;</li>`;
             }
             message += "</ul>";
@@ -559,7 +587,9 @@ createApp({
     },
     clearEdit() {
       this.inpaintImageUploader = null;
-      this.ImageEditor.render();
+      if (this.ImageEditor) {
+        this.ImageEditor.render();
+      }
     },
     initializeFilerobot() {
       const container = document.getElementById("inpaint-image-editor");
@@ -644,6 +674,7 @@ createApp({
     packGenerationParameters() {
       let genParams = {
         task_id: this.runningTaskId,
+        task_type: this.taskType,
         prompt: this.prompt,
         negative_prompt: this.negativePrompt,
         style_selections: this.selectedStyles,
@@ -651,7 +682,7 @@ createApp({
         aspect_ratios_selection: this.aspectRatio,
         image_number: this.imageNumber,
         image_seed: this.isRandom ? -1 : this.randomSeed,
-        sharpness: this.imageSharpness,
+        sharpness: this.taskType === "sdxl"? this.imageSharpness: this.clipSkip,
         guidance_scale: this.guidanceScale,
         base_model: this.baseModel,
         refiner_model: this.refiner,
@@ -989,7 +1020,9 @@ createApp({
     getGptVisionTaskStatus(task_id, retries = 5, backoff = 300) {
       if (retries <= 0) {
         this.describeImageLoading = false;
-        notifier.alert("Could not get GPT vision task progress. Please try again later.");
+        notifier.alert(
+          "Could not get GPT vision task progress. Please try again later.",
+        );
         console.warn("Get gpt vision task progress retries exhausted");
         return;
       }
@@ -1024,7 +1057,9 @@ createApp({
           } else if (result.status === "finished") {
             this.describeImageLoading = false;
             if (result.nsfw) {
-              notifier.warning("Image violates GPT vision policy. We could not proceed with the request nor refund your credits.");
+              notifier.warning(
+                "Image violates GPT vision policy. We could not proceed with the request nor refund your credits.",
+              );
             } else {
               this.prompt = result.prompt;
               this.gptVisionTask.result = result.prompt;
@@ -1032,7 +1067,11 @@ createApp({
                 this.describeImageUploader,
               );
               const ratio = width / height;
-              const ratioItem = this.findClosestItem(this.aspectRatiosNumber, "ratio", ratio);
+              const ratioItem = this.findClosestItem(
+                this.aspectRatiosNumber,
+                "ratio",
+                ratio,
+              );
               this.aspectRatio = ratioItem.text;
             }
           } else if (result.status === "started") {
@@ -1051,7 +1090,9 @@ createApp({
             }, 1000);
           } else {
             this.describeImageLoading = false;
-            notifier.alert("Could not get GPT vision task progress. Please try again later.");
+            notifier.alert(
+              "Could not get GPT vision task progress. Please try again later.",
+            );
           }
           if (result.status !== "queued") {
             this.gptVisionTask.queueLength = 0;
@@ -1096,7 +1137,7 @@ createApp({
           } else if (response.status === 451) {
             response.json().then((result) => {
               this.describeErrorMessage = result.detail.message;
-            })
+            });
           }
           return Promise.reject(response);
         })
@@ -1232,17 +1273,19 @@ createApp({
       this.imagePrompts[index].params.weight =
         this.imagePromptDefaultValues[styleType].weight;
     },
-    updateDefaultOptions(preset, callback = null) {
+    updateDefaultOptions(preset, taskType = null, callback = null) {
       this.loadingPreset = true;
       if (this.selectedPreset === preset) {
         this.selectingPreset = false;
         this.loadingPreset = false;
         return;
       }
+      taskType = taskType || this.taskType;
       fetch(
         "/api/focus/default_options?" +
           new URLSearchParams({
             preset: preset,
+            task_type: taskType,
           }),
         {
           method: "GET",
@@ -1261,7 +1304,7 @@ createApp({
           this.aspectRatio = options.aspect_ratios.default;
           this.aspectRatiosNumber = options.aspect_ratios.options.map(
             (item) => {
-              const regex = /(\d+)×(\d+) \((\d+):(\d+)\)/;
+              const regex = /(\d+)x(\d+) \((\d+):(\d+)\)/;
               const match = item.match(regex);
 
               if (match) {
@@ -1327,7 +1370,11 @@ createApp({
             }
           }
           this.guidanceScale = options.cfg_scale;
-          this.imageSharpness = options.sample_sharpness;
+          if (taskType === "sdxl") {
+            this.imageSharpness = options.sample_sharpness;
+          } else {
+            this.clipSkip = options.sample_sharpness;
+          }
           this.selectedSampler = options.sampler.default;
           this.availableSamplers = options.sampler.options;
           this.selectedScheduler = options.scheduler.default;
@@ -1387,7 +1434,7 @@ createApp({
     },
     getTargetResolution() {
       const [width, height] = this.aspectRatio
-        .replace("×", " ")
+        .replace("x", " ")
         .split(" ")
         .slice(0, 2);
       return [Number(width), Number(height)];
@@ -1460,9 +1507,15 @@ createApp({
 
         this._featurePermissions = {
           generate: body.generate,
-          buttons: Object.fromEntries(body.buttons.map((item) => [item.name, item])),
-          features: Object.fromEntries(body.features.map((item) => [item.name, item])),
-          limits: Object.fromEntries(body.limits.map((item) => [item.tier, item])),
+          buttons: Object.fromEntries(
+            body.buttons.map((item) => [item.name, item]),
+          ),
+          features: Object.fromEntries(
+            body.features.map((item) => [item.name, item]),
+          ),
+          limits: Object.fromEntries(
+            body.limits.map((item) => [item.tier, item]),
+          ),
         };
 
         this._featurePermissions.upgradableLimits = UPGRADABLE_TIERS.map(
@@ -1598,17 +1651,46 @@ createApp({
       let args = await this.getImageOptionsConsumeArgs();
       if (!args) {
         const [width, height] = this.getTargetResolution();
-        args = {
-          fooocus: {
-            params: {
-              width: width,
-              height: height,
-              steps_coefficient: this.getStepsCoefficient(),
-              ip_ctrls: 0,
-              image_number: this.imageNumber,
+        if (this.taskType === "sd3") {
+          args = {
+            "fooocus.sd3": {
+              params: {
+                width: width,
+                height: height,
+                steps_coefficient: this.getStepsCoefficient(),
+                ip_ctrls: 0,
+                image_number: this.imageNumber,
+                ratio: 1.5,
+              },
             },
-          },
-        };
+          };
+        } else if (this.taskType === "flux") {
+          args = {
+            "fooocus.flux": {
+              params: {
+                width: width,
+                height: height,
+                steps_coefficient: this.getStepsCoefficient(),
+                ip_ctrls: 0,
+                image_number: this.imageNumber,
+                ratio: 2,
+              },
+            },
+          };
+        } else {
+          args = {
+            fooocus: {
+              params: {
+                width: width,
+                height: height,
+                steps_coefficient: this.getStepsCoefficient(),
+                ip_ctrls: 0,
+                image_number: this.imageNumber,
+                ratio: 1,
+              },
+            },
+          };
+        }
       }
       if (JSON.stringify(args) === JSON.stringify(this.estimateConsume.args)) {
         return;
@@ -1743,16 +1825,13 @@ createApp({
         model: this.sd3.baseModel,
         seed: this.isRandom ? 0 : this.randomSeed,
         image_number: this.imageNumber,
-      }
+      };
 
-      return fetch(
-        "/api/v3/internal/stability/sd3/txt2img",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      )
+      return fetch("/api/v3/internal/stability/sd3/txt2img", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
     },
     async postSD3img2img() {
       const body = {
@@ -1764,37 +1843,34 @@ createApp({
         image_number: this.imageNumber,
         image: this.imagePromptImages[0],
         strength: this.sd3.strength,
-      }
+      };
 
-      return fetch(
-        "/api/v3/internal/stability/sd3/img2img",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      )
+      return fetch("/api/v3/internal/stability/sd3/img2img", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
     },
     async _checkSD3Permission(allowed_tiers, use_cache = true) {
       if (!use_cache) {
-         await this.getUserOrderInformation();
+        await this.getUserOrderInformation();
       }
       const order_info = this.userOrderInformation;
       if (!allowed_tiers.includes(order_info.tier)) {
-          return { allowed: false, reason: "TIER_NOT_ALLOWED" }
+        return { allowed: false, reason: "TIER_NOT_ALLOWED" };
       }
       if (order_info.trialing) {
-          return { allowed: false, reason: "TRIAL_NOT_ALLOWED" }
+        return { allowed: false, reason: "TRIAL_NOT_ALLOWED" };
       }
-      return { allowed: true }
+      return { allowed: true };
     },
     async checkSD3Permission() {
       const permissions = await this.getFeaturePermissions();
       const allowed_tiers = permissions.buttons.SD3.allowed_tiers;
 
-      let result = await this._checkSD3Permission(allowed_tiers)
+      let result = await this._checkSD3Permission(allowed_tiers);
       if (!result.allowed) {
-        result = await this._checkSD3Permission(allowed_tiers, false)
+        result = await this._checkSD3Permission(allowed_tiers, false);
       }
       if (result.allowed) {
         return true;
@@ -1804,22 +1880,35 @@ createApp({
         const message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
                         Please upgrade to ${allowed_tiers_message} to use it.`;
 
-        this.openPopup("refocus_sd3_tier_checker", "Upgrade Now", message, "Upgrade", SUBSCRIPTION_URL);
+        this.openPopup(
+          "refocus_sd3_tier_checker",
+          "Upgrade Now",
+          message,
+          "Upgrade",
+          SUBSCRIPTION_URL,
+        );
         return false;
       }
       if (result.reason === "TRIAL_NOT_ALLOWED") {
-        const message = "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
+        const message =
+          "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
         const url = await this.getSubscribeURL();
         if (!url) {
           url = SUBSCRIPTION_URL;
         }
-        this.openPopup("refocus_sd3_trialing_checker", "Subscribe Now", message, "Subscribe Now", url);
+        this.openPopup(
+          "refocus_sd3_trialing_checker",
+          "Subscribe Now",
+          message,
+          "Subscribe Now",
+          url,
+        );
         return false;
       }
       return false;
     },
     async generateSD3() {
-      const is_allowed = await this.checkSD3Permission()
+      const is_allowed = await this.checkSD3Permission();
       if (!is_allowed) {
         return;
       }
@@ -1831,7 +1920,6 @@ createApp({
       this.runningTaskMessage = "Generating...";
       this.runningTaskResultImages = [];
       this.runningTaskId = randomId();
-
 
       try {
         if (this.imagePromptImages[0]) {
@@ -1852,7 +1940,9 @@ createApp({
           } else if (status_code === 424) {
             const content = await response.json();
             const detail = content.detail;
-            errorMessage = `Error "${detail.name}" from Stability AI: ${detail.errors.join(" ")}`;
+            errorMessage = `Error "${
+              detail.name
+            }" from Stability AI: ${detail.errors.join(" ")}`;
           } else {
             errorMessage = await response.text();
           }
@@ -1860,14 +1950,16 @@ createApp({
         }
 
         content = await response.json();
-        this.runningTaskResultImages = content.images.map((item) => ({src: item.image, id: 0}));
-
+        this.runningTaskResultImages = content.images.map((item) => ({
+          src: item.image,
+          id: 0,
+        }));
       } finally {
         this.generating = false;
         this.pushHistory(errorMessage);
         this.runningTaskId = "";
       }
-    }
+    },
   },
   computed: {
     isLCMMode() {
@@ -1885,7 +1977,7 @@ createApp({
     numImagePrompts: {
       get() {
         if (this.sd3.enabled) {
-            return 1;
+          return 1;
         }
         return this._numImagePrompts;
       },
@@ -1906,6 +1998,16 @@ createApp({
         await reportIdentity(newInfo.user_id, newInfo.email);
       }
     },
+    taskType(newType, oldType) {
+      if (newType.toLowerCase() === "sd3") {
+        this.sd3.enabled = true;
+      } else {
+        this.sd3.enabled = false;
+      }
+      if (newType.toLowerCase() !== "sdxl" && this.imageOptionTab !== "desc") {
+        this.imageOptionTab = "desc";
+      }
+    },
   },
   created() {
     for (let name of [
@@ -1919,6 +2021,7 @@ createApp({
       "outpaintDirection",
       "aspectRatio",
       "imageNumber",
+      "taskType",
     ]) {
       this.$watch(name, this.updateEstimateConsume);
     }
@@ -1934,15 +2037,12 @@ createApp({
       this.$watch(name, this.updateGptVisionEstimateConsume);
     }
 
-    for (let name of [
-      "sd3.baseModel",
-      "imageNumber",
-    ]) {
+    for (let name of ["sd3.baseModel", "imageNumber"]) {
       this.$watch(name, this.updateSD3EstimateConsume);
     }
   },
   async mounted() {
-    this.updateDefaultOptions("default", () => {
+    this.updateDefaultOptions("default", this.taskType, () => {
       this.initializeFilerobot();
       this.startIntroJS();
     });

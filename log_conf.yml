@@ -33,6 +33,12 @@ handlers:
     when: midnight
     backupCount: 7
 loggers:
+  default:
+    level: INFO
+    handlers:
+      - default
+      - file_default
+    propagate: no
   uvicorn.error:
     level: INFO
     handlers:

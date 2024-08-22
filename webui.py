@@ -20,7 +20,7 @@ import copy
 import logging
 import uuid
 import asyncio
-from typing import Any
+from typing import Any, Literal
 import yaml
 
 from modules.sdxl_styles import legal_style_names
@@ -30,7 +30,7 @@ from modules.auth import auth_enabled, check_auth
 from modules import script_callbacks
 
 from fastapi import FastAPI
-from api import settings, Status, QueuingStatus, Progress, create_api
+from api import Status, QueuingStatus, Progress, create_api
 
 import logging.config
 
@@ -40,7 +40,13 @@ with open(os.path.join(os.path.dirname(__file__), "log_conf.yml"), "r") as f:
 logger = logging.getLogger("uvicorn.error")
 
 
-async def generate_clicked(*args, base_dir: str | None = None, task_id: str = '', metadata: dict[str, Any] | None = None):
+async def generate_clicked(
+    *args,
+    base_dir: str | None = None,
+    task_id: str = '',
+    metadata: dict[str, Any] | None = None,
+    task_type: Literal["sdxl", "sd3", "flux"] | None = None,
+):
     import ldm_patched.modules.model_management as model_management
     if not task_id:
         task_id = str(uuid.uuid4())
@@ -51,7 +57,8 @@ async def generate_clicked(*args, base_dir: str | None = None, task_id: str = ''
     # outputs=[progress_html, progress_window, progress_gallery, gallery]
 
     execution_start_time = time.perf_counter()
-    task = worker.AsyncTask(task_id=task_id, args=list(args), base_dir=base_dir, metadata=metadata)
+    task = worker.AsyncTask(
+        task_id=task_id, args=list(args), base_dir=base_dir, metadata=metadata, task_type=task_type)
     finished = False
 
     yield Progress(flag='preparing', task_id=task_id, status=Status(percentage=1, title='Waiting for task to start ...', images=[]))

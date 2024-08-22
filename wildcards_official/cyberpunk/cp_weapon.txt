@@ -1,0 +1,5 @@
+gun
+sword
+computer
+nunchucks
+Laser rifle

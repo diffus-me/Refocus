@@ -1,0 +1,41 @@
+Simple prompts sometimes give better results.
+Setting Image Number to 0 will generate infinite images.
+Combine simple prompts with styles for instant great results.
+The Flufferize style will magically improve your prompt.
+The Hyperprompt style will rewrite and expand your prompt.
+Easily apply LoRA's on the Models tab.
+Auto Negative Prompt will automatically apply a negative prompt for you.
+Gain ultimate power on the PowerUp tab!
+IMG2IMG can be found on the PowerUp tab.
+Inpainting can be found on the PowerUp tab.
+ControlNET can be found on the PowerUp tab.
+Upscaling can be done on via the PowerUp tab.
+Get transparent images with LayerDiffuse. Available on the PowerUp tab.
+Evolve your prompt and create 9 variants. Look for Evolve on the PowerUp tab.
+Need inspiration? Use the One Button tab to autogenerate a prompt for you!
+Creating art? Use the Artify styles!
+Can't decide your style? Choose "Style: Pick Random"!
+Check your prompt in the Info tab.
+Slideshow while generating? Find the secret π on the Info tab.
+RuinedFooocus supports wildcards, type __ to bring up the wildcard helper.
+One Button Prompt has some build in wildcards, they all start with __onebutton
+`__onebuttonmale:gandalf__` is something that actually works.
+Type `__onebuttonfemale:harley quinn__` for infinite harley variants.
+In the \settings\ folder, you can set all standard settings on startup.
+Tick the "Hurt me plenty" box to bring up all options.
+Type what you don't want to see in the Negative Prompt box.
+Use --- to add multiple prompts.
+Choose "Custom..." in many places to create and save your own settings.
+Type `search:` in the prompt to find images generated today.
+No seed is better than any other, except -1, which is random.
+Using OBP and an Anime/Pony style model? Set the Model type to `Anime model`
+Download new models from civitai or huggingface.
+RuinedFooocus is automatically updated on startup.
+Add `LoRA keywords` as a style to automatically add all neccesary keywords for each loaded LoRa.
+Words at the start of the prompt are considered more important.
+Adding `(parentheses)` makes words have more weight.
+A good starting prompt structure is: type of image, a subject, lighting, atmosphere
+Adding an artist to a prompt heavily influences the outcome.
+Some words can have a big impact on the outcome. Be creative and vary things up.
+You can type nonsense words, and it will still work. Mostly.
+Some models are very specific in what they can and can't generate.

@@ -1,0 +1,51 @@
+male orc
+female orc
+male elf
+female elf
+male Dwarf
+female Dwarf
+male cyborg
+female cyborg
+Dwarven robot
+black man
+black woman
+hispanic man
+hispanic woman
+asian man
+asian woman
+native american
+Cyborg black man
+Cyborg black woman
+Cyborg hispanic man
+Cyborg hispanic woman
+Cyborg asian man
+Cyborg asian woman
+Cyborg native american
+Orc black man
+Orc black woman
+Orc hispanic man
+Orc hispanic woman
+Orc asian man
+Orc asian woman
+Orc native american
+Elf black man
+Elf black woman
+Elf hispanic man
+Elf hispanic woman
+Elf asian man
+Elf asian woman
+Elf native american
+Dwarven black man
+Dwarven black woman
+Dwarven hispanic man
+Dwarven hispanic woman
+Dwarven asian man
+Dwarven asian woman
+Dwarven native american
+Troll black man
+Troll black woman
+Troll hispanic man
+Troll hispanic woman
+Troll asian man
+Troll asian woman
+Troll native american

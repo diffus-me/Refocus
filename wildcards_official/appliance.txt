@@ -1,0 +1,264 @@
+Refrigerator
+Stove
+Microwave
+Toaster oven
+Coffee maker
+Tea kettle
+Blender
+Food processor
+Mixer
+Juicer
+Slow cooker
+Pressure cooker
+Rice cooker
+Air fryer
+Waffle iron
+Toaster
+Garbage disposal
+Dishwasher
+Washing machine
+Clothes dryer
+Vacuum cleaner
+Mop
+Broom
+Dustpan
+Iron
+Steam iron
+Sewing machine
+Heating pad
+Electric blanket
+Air conditioner
+Humidifier
+Dehumidifier
+Fan
+Space heater
+Radiator
+Hair dryer
+Curling iron
+Flat iron
+Electric toothbrush
+Water flosser
+Electric shaver
+Beard trimmer
+Nose hair trimmer
+Alarm clock
+Speaker
+Television
+Gaming console
+Desktop computer
+Laptop
+Tablet
+Smartphone
+Printer
+Scanner
+Laminator
+Shredder
+Cable box
+DVD player
+Blu-Ray player
+Projector
+Camera
+Baby monitor
+Outlet tester
+Stud finder
+Flashlight
+Night light
+Smoke detector
+Carbon monoxide detector
+Surge protector
+Extension cord
+Power strip
+Inverter
+Solar panel
+Generator
+Lawn mower
+Leaf blower
+Weed eater
+Hedge trimmer
+Pressure washer
+Snow blower
+Space heater
+Dehumidifier
+Humidifier
+Air purifier
+Air fryer
+Slow cooker
+Rice cooker
+Deep fryer
+Hot plate
+Popcorn maker
+Soda maker
+Can opener
+Bottle opener
+Wine opener
+Meat grinder
+Food steamer
+Bread maker
+Yogurt maker
+Ice cream maker
+Pasta maker
+Food dehydrator
+Waffle maker
+Egg cooker
+Electric kettle
+Hand mixer
+Stand mixer
+Immersion blender
+Food steamer
+Rice cooker
+Slow cooker
+Pressure cooker
+Air fryer 
+Deep fryer
+Hot plate
+Popcorn maker
+Soda maker  
+Can opener
+Bottle opener
+Wine opener
+Meat grinder
+Food steamer
+Bread maker
+Yogurt maker
+Ice cream maker
+Pasta maker
+Food dehydrator
+Waffle maker
+Egg cooker
+Coffee grinder 
+Burr grinder
+Drip coffeemaker
+Percolator 
+French press
+Espresso machine  
+Cappuccino machine
+Electric tea kettle
+Hot water dispenser
+Water cooler  
+Water filter
+Water softener
+Refrigerator 
+Freezer
+Wine cooler
+Trash compactor 
+Garbage disposal
+Dishwasher
+Washing machine
+Clothes dryer  
+Steam cleaner
+Iron
+Garment steamer
+Sewing machine
+Serger
+Embroidery machine
+Quilting machine
+Vacuum cleaner
+Carpet cleaner
+Steam mop
+Robot vacuum  
+Air purifier
+Humidifier 
+Dehumidifier
+Fan 
+Space heater
+Radiator
+Air conditioner 
+Window AC unit
+Portable AC unit
+Heat pump  
+Furnace 
+Boiler  
+Water heater
+Instant hot water dispenser
+Bidet 
+Toilet
+Bathroom vent fan
+Exhaust fan
+Range hood
+Cooktop
+Wall oven  
+Microwave oven
+Convection oven 
+Toaster oven  
+Food processor  
+Stand mixer
+Hand mixer  
+Blender
+Juicer
+Meat grinder
+Food dehydrator
+Popcorn maker 
+Deep fryer
+Slow cooker
+Rice cooker 
+Multicooker
+Pressure cooker
+Steamer  
+Roaster
+Broiler 
+Rotisserie 
+Grill
+Smoker 
+Waffle maker
+Waffle iron
+Sandwich maker 
+Quesadilla maker
+Pizza oven
+Raclette grill
+Fondue pot
+Hot pot
+Crockpot
+Electric griddle  
+Electric skillet
+Rice cooker
+Yogurt maker  
+Bread machine 
+Pasta maker
+Ice cream maker
+Smoothie maker 
+Food processor 
+Coffee maker
+Espresso machine
+Tea kettle
+Kettle
+Toaster
+Oven
+Stove
+Induction cooktop
+Electric cooktop
+Gas cooktop
+Range 
+Double oven
+Fridge 
+Side-by-side fridge
+French door fridge  
+Bottom freezer fridge
+Top freezer fridge
+Mini fridge
+Freezer
+Wine fridge
+Washer 
+Dryer
+Stackable washer dryer
+Pedestal washer 
+Front load washer
+Top load washer 
+Dryer
+Ventless dryer
+Combo washer dryer
+All-in-one washer dryer
+Portable washer 
+Portable dryer
+Garbage disposal
+Trash compactor
+Vacuum  
+Upright vacuum
+Canister vacuum  
+Handheld vacuum
+Stick vacuum
+Robot vacuum
+Steam mop
+Carpet cleaner
+Air purifier
+Humidifier
+Dehumidifier

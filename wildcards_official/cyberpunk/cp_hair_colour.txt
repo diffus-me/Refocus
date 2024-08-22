@@ -1,0 +1,23 @@
+red
+blonde
+white
+black
+blue
+green
+orange
+yellow
+brown
+none
+purple
+multicoloured
+brunette 
+Light Pink
+Dark red
+Light Blue
+Faded Green
+Green and Red
+Green and Yellow
+Yellow and Ornage
+Black and red
+Red and Blue
+Blonde and Red

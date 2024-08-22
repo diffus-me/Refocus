@@ -1,0 +1,44 @@
+{
+    "task_type": "sd3",
+    "default_model": "sd3_medium_incl_clips.safetensors",
+    "default_refiner": "None",
+    "default_refiner_switch": 0.5,
+    "default_loras": [
+        [
+            "None",
+            1.0
+        ],
+        [
+            "None",
+            1.0
+        ],
+        [
+            "None",
+            1.0
+        ],
+        [
+            "None",
+            1.0
+        ],
+        [
+            "None",
+            1.0
+        ]
+    ],
+    "default_cfg_scale": 5.0,
+    "default_clip_skip": 1,
+    "default_sampler": "dpmpp_2m",
+    "default_scheduler": "sgm_uniform",
+    "default_performance": "Speed",
+    "default_prompt": "",
+    "default_prompt_negative": "",
+    "default_styles": [
+    ],
+    "default_aspect_ratio": "1152*896",
+    "checkpoint_downloads": {
+        "sd3_medium_incl_clips.safetensors": "https://cdn-lfs-us-1.huggingface.co/repos/e2/a1/e2a1fa97e711ee8a522ec09a542b1577904208d820521111408766a594041429/3bb7f21bc5fb450220f4eb78a2f276b15422309d5166a4bdeb8c3b763a3a0581?response-content-disposition=attachment%3B+filename*%3DUTF-8%27%27sd3_medium_incl_clips.safetensors%3B+filename%3D%22sd3_medium_incl_clips.safetensors%22%3B&Expires=1724083799&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTcyNDA4Mzc5OX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2RuLWxmcy11cy0xLmh1Z2dpbmdmYWNlLmNvL3JlcG9zL2UyL2ExL2UyYTFmYTk3ZTcxMWVlOGE1MjJlYzA5YTU0MmIxNTc3OTA0MjA4ZDgyMDUyMTExMTQwODc2NmE1OTQwNDE0MjkvM2JiN2YyMWJjNWZiNDUwMjIwZjRlYjc4YTJmMjc2YjE1NDIyMzA5ZDUxNjZhNGJkZWI4YzNiNzYzYTNhMDU4MT9yZXNwb25zZS1jb250ZW50LWRpc3Bvc2l0aW9uPSoifV19&Signature=mb34aaaH5-mGpv%7EOJhJajSFNqLICWET0pDH30y7Rc5CXyEknyvEGYdsTxUlc7VqcMKamM2kFdHFNm7DumjWry816b6TzsB%7EuBe7LeFLXfVhVyw1l3XjuV3EeXGmKSTW9CH7rJCQ4%7ETjZ6Hnz4sE2pqG83mowmwJa4%7EM7pD%7EhfMoXpMfRn02nksXy1Jp9x%7ECmehWYwveK681-LFLzfeX3n6eoTD96Uqs9Llw5KxRaSF1P45jdSQWz--9SEOFCEqVY85sWL6RbDMvCT0knISmMptSZBA0NivBZDga5v%7EOBUZmjxnqtx4ht6DCyWIywHXWWd0HPBhmmnRbxcwohhkvOzA__&Key-Pair-Id=K24J24Z295AEI9"
+    },
+    "embeddings_downloads": {},
+    "lora_downloads": {},
+    "previous_default_models": []
+}
