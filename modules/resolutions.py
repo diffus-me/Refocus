@@ -22,7 +22,12 @@ class ResolutionSettings:
                     self.base_ratios[ratio] = (res["width"], res["height"])
         else:
             for value in available_aspect_ratios:
-                width, height = value.replace('*', ' ').split(' ')[:2]
+                if '*' in value:
+                    width, height = value.replace('*', ' ').split(' ')[:2]
+                elif 'x' in value:
+                    width, height = value.replace('x', ' ').split(' ')[:2]
+                else:
+                    raise ValueError(f'invalid aspect_ratios {value}')
                 width, height = int(width), int(height)
                 gcd = math.gcd(width, height)
                 self.base_ratios[f'{width // gcd}:{height // gcd}'] = (width, height)
