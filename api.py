@@ -307,8 +307,12 @@ class GenerationOption(BaseModel):
     )
 
     def get_target_resolution(self) -> tuple[int, int]:
-        width, height = self.aspect_ratios_selection.replace("x", " ").split(" ")[:2]
-
+        if "x" in self.aspect_ratios_selection:
+            width, height = self.aspect_ratios_selection.replace("x", " ").split(" ")[:2]
+        elif "*" in self.aspect_ratios_selection:
+            width, height = self.aspect_ratios_selection.replace("*", " ").split(" ")[:2]
+        else:
+            raise ValueError(f"invalid aspect_ratio {self.aspect_ratios_selection}")
         if self.advanced_options.overwrite_width > 0:
             width = self.advanced_options.overwrite_width
 
