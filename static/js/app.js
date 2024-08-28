@@ -801,6 +801,7 @@ createApp({
           `${wsProtocol}://${this.hostname}/api/focus/ws/generate?` +
             new URLSearchParams({
               new_task_id: this.runningTaskId,
+              task_type: this.taskType,
             }),
         );
         reportSpendCreditsEvent(

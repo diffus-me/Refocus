@@ -966,6 +966,7 @@ def create_api(
     async def generate_image_socket(
         websocket: WebSocket,
         task_id: str | None = None,
+        task_type: Literal["sdxl", "sd3", "flux"] | None = None,
         is_url: bool = False,
         user_id: Annotated[str | None, Header()] = "local",
     ):
@@ -993,6 +994,8 @@ def create_api(
                 request_headers["x-session-hash"] = str(uuid.uuid4())
                 request_headers["x-task-id"] = generation_option.task_id
                 task_id = generation_option.task_id
+                if task_type and task_type != generation_option.task_type:
+                    raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="task_type from query & generation_option are different.")
                 script_callbacks.before_task_callback(task_id)
                 args = await prepare_args_for_generate(generation_option, user_id)
                 function_name, decoded_params = _get_consume_args(generation_option)
