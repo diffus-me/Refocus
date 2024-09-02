@@ -412,8 +412,15 @@ createApp({
           confirmText = "Upgrade";
           url = SUBSCRIPTION_URL;
 
+          let hint;
+          if (this.userOrderInformation.tier.toLowerCase() === "appsumo ltd tier 1") {
+            hint = "lift these restrictions";
+          } else {
+            hint = "enable your private image storage";
+          }
+
           message = `Potential NSFW content was detected in the generated image, \
-            upgrade to ${NSFW_ALLOWED_TIERS_MESSAGE} to enable your private image storage. \
+            upgrade to ${NSFW_ALLOWED_TIERS_MESSAGE} to ${hint}. \
             Or join our ${AFFILIATE_PROGRAM} \
             to earn cash or credits and use it to upgrade to a higher plan.`;
 
