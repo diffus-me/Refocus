@@ -783,6 +783,13 @@ createApp({
         this.generateSD3();
         return;
       }
+
+      if (this.taskType === "flux") {
+          const is_allowed = await this.checkPermission("Flux");
+          if (!is_allowed) {
+            return;
+          }
+      }
       if (!(await this.checkSafetyAgreement())) {
         return;
       }
@@ -1859,7 +1866,38 @@ createApp({
         body: JSON.stringify(body),
       });
     },
-    async _checkSD3Permission(allowed_tiers, use_cache = true) {
+    async _openTierCheckPopup(reason, name, full_name, allowed_tiers) {
+      if (reason === "TIER_NOT_ALLOWED") {
+        const allowed_tiers_message = _joinTiers(allowed_tiers);
+        const message = `<b>${full_name}</b> is not available in the current plan. \
+                        Please upgrade to ${allowed_tiers_message} to use it.`;
+
+        this.openPopup(
+          `refocus_${name.toLowerCase()}_tier_checker`,
+          "Upgrade Now",
+          message,
+          "Upgrade",
+          SUBSCRIPTION_URL,
+        );
+        return;
+      }
+      if (reason === "TRIAL_NOT_ALLOWED") {
+        const message =
+          `<b>${full_name}</b> is not available in trial. Subscribe now to use it.`;
+        const url = await this.getSubscribeURL();
+        if (!url) {
+          url = SUBSCRIPTION_URL;
+        }
+        this.openPopup(
+          `refocus_${name.toLowerCase()}_trialing_checker`,
+          "Subscribe Now",
+          message,
+          "Subscribe Now",
+          url,
+        );
+      }
+    },
+    async _checkPermission(allowed_tiers, use_cache = true, trial_allowed = true) {
       if (!use_cache) {
         await this.getUserOrderInformation();
       }
@@ -1867,56 +1905,27 @@ createApp({
       if (!allowed_tiers.includes(order_info.tier)) {
         return { allowed: false, reason: "TIER_NOT_ALLOWED" };
       }
-      if (order_info.trialing) {
+      if (!trial_allowed && order_info.trialing) {
         return { allowed: false, reason: "TRIAL_NOT_ALLOWED" };
       }
       return { allowed: true };
     },
-    async checkSD3Permission() {
+    async checkPermission(name, full_name = null, trial_allowed = true) {
       const permissions = await this.getFeaturePermissions();
-      const allowed_tiers = permissions.buttons.SD3.allowed_tiers;
+      const allowed_tiers = permissions.buttons[name].allowed_tiers;
 
-      let result = await this._checkSD3Permission(allowed_tiers);
+      let result = await this._checkPermission(allowed_tiers, true, trial_allowed);
       if (!result.allowed) {
-        result = await this._checkSD3Permission(allowed_tiers, false);
+        result = await this._checkPermission(allowed_tiers, false, trial_allowed);
       }
       if (result.allowed) {
         return true;
       }
-      if (result.reason === "TIER_NOT_ALLOWED") {
-        const allowed_tiers_message = _joinTiers(allowed_tiers);
-        const message = `<b>Stable Diffusion 3</b> is not available in the current plan. \
-                        Please upgrade to ${allowed_tiers_message} to use it.`;
-
-        this.openPopup(
-          "refocus_sd3_tier_checker",
-          "Upgrade Now",
-          message,
-          "Upgrade",
-          SUBSCRIPTION_URL,
-        );
-        return false;
-      }
-      if (result.reason === "TRIAL_NOT_ALLOWED") {
-        const message =
-          "<b>Stable Diffusion 3</b> is not available in trial. Subscribe now to use it.";
-        const url = await this.getSubscribeURL();
-        if (!url) {
-          url = SUBSCRIPTION_URL;
-        }
-        this.openPopup(
-          "refocus_sd3_trialing_checker",
-          "Subscribe Now",
-          message,
-          "Subscribe Now",
-          url,
-        );
-        return false;
-      }
+      this._openTierCheckPopup(result.reason, name, full_name ? full_name : name, allowed_tiers)
       return false;
     },
     async generateSD3() {
-      const is_allowed = await this.checkSD3Permission();
+      const is_allowed = await this.checkPermission("SD3", "Stable Diffusion 3", false);
       if (!is_allowed) {
         return;
       }
