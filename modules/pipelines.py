@@ -1,4 +1,5 @@
 import gc 
+import logging
 from shared import state, path_manager
 from modules.civit import Civit
 from pathlib import Path
@@ -6,12 +7,17 @@ import re
 
 import torch
 
+from modules.util import setup_logging
+
+setup_logging()
+logger = logging.getLogger("default")
+
 civit = Civit(cache_path=Path(path_manager.model_paths["cache_path"]) / Path("checkpoints"))
 
 try:
     import modules.faceswapper_pipeline as faceswapper_pipeline
 
-    print("INFO: Faceswap enabled")
+    logger.info("INFO: Faceswap enabled")
     state["faceswap_loaded"] = True
 except:
     state["faceswap_loaded"] = False
@@ -113,7 +119,7 @@ def update(gen_data):
                     state["pipeline"] = sdxl_pipeline.pipeline()
 
         if state["pipeline"] is None or len(state["pipeline"].pipeline_type) == 0:
-            print(f"Warning: Using SDXL pipeline as fallback.")
+            logger.warning(f"Warning: Using SDXL pipeline as fallback.")
             state["pipeline"] = sdxl_pipeline.pipeline()
 
         return state["pipeline"]

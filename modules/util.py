@@ -2,19 +2,36 @@ import numpy as np
 import datetime
 import random
 import logging
+import logging.config
 import math
 import os
 import cv2
 import time
+import psutil
+import torch
+import yaml
 from pathlib import Path
 
 from typing import Optional
 from urllib.parse import urlparse
 import json
+from contextlib import contextmanager
 
 from PIL import Image
 
-logger = logging.getLogger("uvicorn.error")
+
+def setup_logging(
+    config_path=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "log_conf.yml"
+    )
+):
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file.read())
+        logging.config.dictConfig(config)
+
+
+setup_logging()
+logger = logging.getLogger("default")
 
 
 LANCZOS = (Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS)
@@ -344,7 +361,7 @@ def load_file_from_url(
 
     cached_file = Path(model_dir) / file_name
     if not cached_file.exists():
-        print(f'Downloading: "{url}" to {cached_file}\n')
+        logger.info(f'Downloading: "{url}" to {cached_file}\n')
         from torch.hub import download_url_to_file
 
         download_url_to_file(url, cached_file.absolute().as_posix(), progress=progress)
@@ -382,3 +399,35 @@ def get_model_filename_given_binary_filename(binary_filename: str):
         return original_filename
     os.symlink(os.path.basename(original_filename), binary_filename)
     return binary_filename
+
+
+def print_memory_status(when: str):
+    # System memory
+    virtual_memory = psutil.virtual_memory()
+    available_memory_gb = virtual_memory.available / (1024 ** 3)
+    logger.info(f"{when} - System memory available: {available_memory_gb:.3f} GB")
+
+    # GPU memory and CUDA availability
+    if torch.cuda.is_available():
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory
+        allocated_memory = torch.cuda.memory_allocated(0)
+        free_memory_gb = (gpu_memory - allocated_memory) / (1024 ** 3)
+        logger.info(f"{when} - GPU memory allocated: {allocated_memory / (1024 ** 3):.3f} GB")
+        logger.info(f"{when} - GPU memory available: {free_memory_gb:.3f} GB")
+    else:
+        logger.info(f"{when} - CUDA is not available")
+
+    # CUDA availability status
+    logger.info(f"{when} - PyTorch can access CUDA: {torch.cuda.is_available()}")
+
+
+@contextmanager
+def memory_context_manager(prefix: str = ""):
+
+    # Before yield
+    print_memory_status(f"[{prefix}] Before execution" if prefix else "Before execution")
+    try:
+        yield
+    finally:
+        # After yield
+        print_memory_status(f"[{prefix}] After execution" if prefix else "After execution")
