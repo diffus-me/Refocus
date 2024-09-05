@@ -6,7 +6,11 @@ from typing import Optional, Any
 from fastapi import FastAPI
 from gradio import Blocks
 
-logger = logging.getLogger(__name__)
+from modules.util import setup_logging
+
+
+setup_logging()
+logger = logging.getLogger("default")
 exception_records = []
 
 

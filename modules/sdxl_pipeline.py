@@ -1,5 +1,6 @@
 from collections.abc import Callable
 import gc
+import logging
 import numpy as np
 import os
 import torch
@@ -14,7 +15,7 @@ from PIL import Image, ImageOps
 
 from comfy.model_base import SDXL, SD3, Flux
 from modules.settings import default_settings
-from modules.util import get_model_filename_given_binary_filename
+from modules.util import get_model_filename_given_binary_filename, memory_context_manager, setup_logging
 from shared import path_manager
 
 from pathlib import Path
@@ -63,6 +64,9 @@ from modules.pipleline_utils import (
     set_timestep_range,
 )
 
+setup_logging()
+logger = logging.getLogger("default")
+
 
 def get_all_samplers() -> list[str]:
     return KSampler.SAMPLERS
@@ -106,7 +110,7 @@ class pipeline:
     inference_memory = None
 
     def merge_models(self, name):
-        print(f"Loading merge: {name}")
+        logger.info(f"Loading merge: {name}")
 
         self.xl_base_patched = None
         self.xl_base_patched_hash = ""
@@ -119,7 +123,7 @@ class pipeline:
         filename = get_model_filename_given_binary_filename(model_info.filename)
         cache_name = str(Path(path_manager.model_paths["cache_path"] / "merges" / Path(name).name).with_suffix(".safetensors"))
         if Path(cache_name).exists() and Path(cache_name).stat().st_mtime >= Path(filename).stat().st_mtime:
-            print(f"Loading cached version:")
+            logger.info(f"Loading cached version:")
             self.load_base_model(cache_name)
             return
 
@@ -128,7 +132,7 @@ class pipeline:
                 merge_data = json.load(f)
 
             if 'comment' in merge_data:
-                print(f"  {merge_data['comment']}")
+                logger.info(f"  {merge_data['comment']}")
 
             model_info = get_all_model_info().get_model(merge_data["base"]["name"])
             assert model_info is not None, f'Model {merge_data["base"]["name"]} not found'
@@ -142,7 +146,7 @@ class pipeline:
                 else:
                     norm = 1.0 / weights
 
-            print(f"Loading base {merge_data['base']['name']} ({round(merge_data['base']['weight'] * norm * 100)}%)")
+            logger.info(f"Loading base {merge_data['base']['name']} ({round(merge_data['base']['weight'] * norm * 100)}%)")
             with torch.torch.inference_mode():
                 unet, clip, vae, clip_vision = load_checkpoint_guess_config(str(filename))
 
@@ -159,7 +163,7 @@ class pipeline:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-            print(f"ERROR: {e}")
+            logger.exception(f"ERROR: {e}")
             return
 
         if "models" in merge_data and len(merge_data["models"]) > 0:
@@ -168,7 +172,7 @@ class pipeline:
 
             w = float(merge_data["base"]["weight"]) * norm
             for m in merge_data["models"]:
-                print(f"Merging {m['name']} ({round(m['weight'] * norm * 100)}%)")
+                logger.info(f"Merging {m['name']} ({round(m['weight'] * norm * 100)}%)")
                 model_info = get_all_model_info().get_model(m["name"])
                 assert model_info is not None, f'Model {m["name"]} not found'
                 #filename = Path(path_manager.model_paths["modelfile_path"] / m["name"])
@@ -196,7 +200,7 @@ class pipeline:
 
         if 'cache' in merge_data and merge_data['cache'] == True:
             filename = str(Path(path_manager.model_paths["cache_path"] / "merges" / Path(name).name).with_suffix(".safetensors"))
-            print(f"Saving merged model: {filename}")
+            logger.info(f"Saving merged model: {filename}")
             with torch.torch.inference_mode():
                 save_checkpoint(
                     filename,
@@ -222,7 +226,7 @@ class pipeline:
             self.merge_models(name)
             return
 
-        print(f"Loading base model: {name}")
+        logger.info(f"Loading base model: {name}")
 
         self.xl_base_patched = None
         self.xl_base_patched_hash = ""
@@ -246,7 +250,7 @@ class pipeline:
                 isinstance(self.xl_base.unet.model, SD3) or
                 isinstance(self.xl_base.unet.model, Flux)
             ):
-                print(
+                logger.info(
                     f"Model {type(self.xl_base.unet.model)} not supported. RuinedFooocus only support SDXL/SD3/Flux models as the base model."
                 )
                 self.xl_base = None
@@ -260,11 +264,11 @@ class pipeline:
                 self.xl_base_patched = self.xl_base
                 self.xl_base_patched_hash = ""
                 # self.xl_base_patched.unet.model.to("cuda")
-                print(f"Base model loaded: {self.xl_base_hash}")
+                logger.info(f"Base model loaded: {self.xl_base_hash}")
 
         except Exception as e:
-            print(f"ERROR: {e}")
-            print(f"Failed to load {name}, loading default model instead")
+            logger.exception(f"ERROR: {e}")
+            logger.exception(f"Failed to load {name}, loading default model instead")
             self.load_base_model(
                 path_manager.default_model_names["default_base_model_name"]
             )
@@ -289,7 +293,7 @@ class pipeline:
             assert model_info is not None, f"Model {name} not found"
             filename = get_model_filename_given_binary_filename(model_info.filename)
             # filename = os.path.join(path_manager.model_paths["lorafile_path"], name)
-            print(f"Loading LoRAs: {name}")
+            logger.info(f"Loading LoRAs: {name}")
             try:
                 lora = comfy.utils.load_torch_file(filename, safe_load=True)
                 unet, clip = comfy.sd.load_lora_for_models(
@@ -310,7 +314,7 @@ class pipeline:
         # self.xl_base_patched_hash = str(loras + [1.01, 1.02, 0.99, 0.95])
         self.xl_base_patched_hash = str(loras)
 
-        print(f"LoRAs loaded: {loaded_loras}")
+        logger.info(f"LoRAs loaded: {loaded_loras}")
 
         return
 
@@ -324,11 +328,11 @@ class pipeline:
             filename = os.path.join(path_manager.model_paths["controlnet_path"], name)
             self.xl_controlnet = comfy.controlnet.load_controlnet(filename)
             self.xl_controlnet_hash = name
-            print(f"ControlNet model loaded: {self.xl_controlnet_hash}")
+            logger.info(f"ControlNet model loaded: {self.xl_controlnet_hash}")
         if self.xl_controlnet_hash != name:
             self.xl_controlnet = None
             self.xl_controlnet_hash = None
-            print(f"Controlnet model unloaded")
+            logger.info(f"Controlnet model unloaded")
 
     conditions = None
 
@@ -395,11 +399,11 @@ class pipeline:
                 isinstance(self.xl_base_patched.unet.model, SD3) or
                 isinstance(self.xl_base_patched.unet.model, Flux)
                 ):
-                print(f"ERROR: Can only use SDXL, SD3 or Flux models")
+                logger.info(f"ERROR: Can only use SDXL, SD3 or Flux models")
                 raise RuntimeError("Can only use SDXL, SD3 or Flux models")
         except Exception as e:
             # Something went very wrong
-            print(f"ERROR: {e}")
+            logger.exception(f"ERROR: {e}")
             if progressbar:
                 progressbar(0, e.__str__())
             interrupt_current_processing()
@@ -426,7 +430,7 @@ class pipeline:
             prompt_switch_mode = True
 
         if prompt_switch_mode and controlnet is not None and input_image is not None:
-            print(
+            logger.info(
                 "ControlNet and [prompt|switching] do not work well together. ControlNet will be applied to the first prompt only."
             )
 
@@ -517,7 +521,7 @@ class pipeline:
         if controlnet is not None and "type" in controlnet:
             if controlnet["type"].lower() == "layerdiffuse":
                 if not "layerdiffuse" in self.xl_base_patched_extra:
-                    print(f"DEBUG: add layerdiffuse")
+                    logger.info(f"DEBUG: add layerdiffuse")
                     tmodel = ModelPatcher(
                         self.xl_base_patched.unet, device, "cpu", size=1
                     )
@@ -546,7 +550,7 @@ class pipeline:
                     )
                 layerdiffuse_mode = True
             else:
-                print(f"DEBUG: remove layerdiffuse")
+                logger.info(f"DEBUG: remove layerdiffuse")
                 # FIXME try reloading model? (and loras)
                 if "layerdiffuse" in self.xl_base_patched_extra:
                     self.xl_base_patched_extra.remove("layerdiffuse")
@@ -665,14 +669,16 @@ class pipeline:
 
         if progressbar:
             progressbar(1, "Start sampling ...")
-        samples = sampler.sample(
-            noise,
-            positive_cond,
-            self.conditions["-"]["cache"],
-            **kwargs,
-        )
+        with memory_context_manager("SDXL Pipeline Sampling"):
+            samples = sampler.sample(
+                noise,
+                positive_cond,
+                self.conditions["-"]["cache"],
+                **kwargs,
+            )
 
-        samples = samples.cpu()
+        with memory_context_manager("SDXL Pipeline moving samples to cpu"):
+            samples = samples.cpu()
 
         cleanup_additional_models(self.models)
 
@@ -682,14 +688,16 @@ class pipeline:
         if progressbar:
             progressbar(1, "VAE decoding ...")
 
-        decoded_latent = VAEDecode().decode(
-            samples=sampled_latent, vae=self.xl_base_patched.vae
-        )[0]
+        with memory_context_manager("SDXL Pipeline VAE Decoding"):
+            decoded_latent = VAEDecode().decode(
+                samples=sampled_latent, vae=self.xl_base_patched.vae
+            )[0]
 
-        images = [
-            np.clip(255.0 * y.cpu().numpy(), 0, 255).astype(np.uint8)
-            for y in decoded_latent
-        ]
+        with memory_context_manager("SDXL Pipeline Convert Images"):
+            images = [
+                np.clip(255.0 * y.cpu().numpy(), 0, 255).astype(np.uint8)
+                for y in decoded_latent
+            ]
 
         preview = None
         if layerdiffuse_mode:

@@ -4,16 +4,26 @@ formatters:
   default:
     "()": uvicorn.logging.DefaultFormatter
     datefmt: "%Y-%m-%d %H:%M:%S"
-    format: '%(levelprefix)s %(asctime)s - %(message)s'
+    format: '%(levelprefix)s %(asctime)s - %(message)s (%(pathname)s %(funcName)s %(lineno)d)'
+    use_colors: False
+  default_colored:
+    "()": uvicorn.logging.DefaultFormatter
+    datefmt: "%Y-%m-%d %H:%M:%S"
+    format: '%(levelprefix)s %(asctime)s (%(funcName)s) - %(message)s'
     use_colors: True
   access:
+    "()": uvicorn.logging.AccessFormatter
+    datefmt: "%Y-%m-%d %H:%M:%S"
+    format: '%(levelprefix)s %(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s'
+    use_colors: False
+  access_colored:
     "()": uvicorn.logging.AccessFormatter
     datefmt: "%Y-%m-%d %H:%M:%S"
     format: '%(levelprefix)s %(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s'
     use_colors: True
 handlers:
   default:
-    formatter: default
+    formatter: default_colored
     class: logging.StreamHandler
     stream: ext://sys.stderr
   file_default:
@@ -23,7 +33,7 @@ handlers:
     when: midnight
     backupCount: 7
   access:
-    formatter: access
+    formatter: access_colored
     class: logging.StreamHandler
     stream: ext://sys.stdout
   file_access:

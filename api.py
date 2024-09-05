@@ -45,7 +45,7 @@ import modules.config
 import modules.flags as flags
 from modules.model_info import get_all_model_info
 import modules.style_sorter as style_sorter
-from modules.util import get_shape_ceil
+from modules.util import get_shape_ceil, setup_logging
 from modules import system_monitor
 from modules.config import convert_ratio, read_preset_and_update_config
 from modules.database import (
@@ -67,7 +67,8 @@ from settings import settings
 
 database_created = False
 
-logger = logging.getLogger("uvicorn.error")
+setup_logging()
+logger = logging.getLogger("default")
 
 
 class Status(BaseModel):

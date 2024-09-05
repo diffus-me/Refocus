@@ -1,4 +1,5 @@
 import gc
+import logging
 import threading
 from modules import script_callbacks
 from typing import Any, Literal
@@ -6,6 +7,10 @@ from PIL import Image
 import functools
 
 from modules.model_info import get_all_model_info
+from modules.util import setup_logging
+
+setup_logging()
+logger = logging.getLogger("default")
 
 
 class AsyncTask:
@@ -68,10 +73,9 @@ def worker():
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image, erode_or_dilate
     from modules.upscaler import perform_upscale
     from modules.prompt_processing import process_metadata, process_prompt, parse_loras
-    from modules.util import generate_temp_filename, TimeIt, model_hash, get_lora_hashes
+    from modules.util import TimeIt, memory_context_manager
     import modules.pipelines
     import modules.controlnet
-    from modules.settings import default_settings
 
     try:
         async_gradio_app = shared.gradio_root
@@ -79,15 +83,15 @@ def worker():
             flag = f'''App started successful. Use the app with {str(async_gradio_app.local_url)} or {str(async_gradio_app.server_name)}:{str(async_gradio_app.server_port)}'''
             if async_gradio_app.share:
                 flag += f''' or {async_gradio_app.share_url}'''
-            print(flag)
+            logger.info(flag)
     except Exception as e:
-        print(e)
+        logger.exception(e)
 
 
     all_models = get_all_model_info()
 
     def progressbar(async_task, number, text, preview_image = None, status = "preview"):
-        print(f'[Fooocus] {text}')
+        logger.info(f'[Fooocus] {text}')
         async_task.yields.append([status, (number, text, preview_image)])
 
     def yield_result(
@@ -215,7 +219,7 @@ def worker():
         use_style = len(style_selections) > 0
 
         if base_model_name == refiner_model_name:
-            print(f'Refiner disabled because base model and refiner are same.')
+            logger.info(f'Refiner disabled because base model and refiner are same.')
             refiner_model_name = 'None'
 
         assert performance_selection in ['Speed', 'Quality', 'Extreme Speed', 'Turbo']
@@ -232,12 +236,12 @@ def worker():
             steps = 5
 
         if performance_selection == 'Extreme Speed':
-            print('Enter LCM mode.')
+            logger.info('Enter LCM mode.')
             progressbar(async_task, 1, 'Downloading LCM components ...')
             loras += [(modules.config.downloading_sdxl_lcm_lora(), 1.0)]
 
             if refiner_model_name != 'None':
-                print(f'Refiner disabled in LCM mode.')
+                logger.info(f'Refiner disabled in LCM mode.')
 
             refiner_model_name = 'None'
             sampler_name = advanced_parameters.sampler_name = 'lcm'
@@ -252,21 +256,21 @@ def worker():
             steps = 8
 
         modules.patch.adaptive_cfg = advanced_parameters.adaptive_cfg
-        print(f'[Parameters] Adaptive CFG = {modules.patch.adaptive_cfg}')
+        logger.info(f'[Parameters] Adaptive CFG = {modules.patch.adaptive_cfg}')
 
         modules.patch.sharpness = sharpness
-        print(f'[Parameters] Sharpness = {modules.patch.sharpness}')
+        logger.info(f'[Parameters] Sharpness = {modules.patch.sharpness}')
 
         modules.patch.positive_adm_scale = advanced_parameters.adm_scaler_positive
         modules.patch.negative_adm_scale = advanced_parameters.adm_scaler_negative
         modules.patch.adm_scaler_end = advanced_parameters.adm_scaler_end
-        print(f'[Parameters] ADM Scale = '
+        logger.info(f'[Parameters] ADM Scale = '
               f'{modules.patch.positive_adm_scale} : '
               f'{modules.patch.negative_adm_scale} : '
               f'{modules.patch.adm_scaler_end}')
 
         cfg_scale = float(guidance_scale)
-        print(f'[Parameters] CFG = {cfg_scale}')
+        logger.info(f'[Parameters] CFG = {cfg_scale}')
 
         initial_latent = None
         denoising_strength = 1.0
@@ -291,7 +295,7 @@ def worker():
         clip_vision_path, ip_negative_path, ip_adapter_path, ip_adapter_face_path = None, None, None, None
 
         seed = int(image_seed)
-        print(f'[Parameters] Seed = {seed}')
+        logger.info(f'[Parameters] Seed = {seed}')
 
         sampler_name = advanced_parameters.sampler_name
         scheduler_name = advanced_parameters.scheduler_name
@@ -358,13 +362,13 @@ def worker():
                         inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(
                             advanced_parameters.inpaint_engine)
                         base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
-                        print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
+                        logger.info(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                         if refiner_model_name == 'None':
                             use_synthetic_refiner = True
                             refiner_switch = 0.5
                     else:
                         inpaint_head_model_path, inpaint_patch_model_path = None, None
-                        print(f'[Inpaint] Parameterized inpaint is disabled.')
+                        logger.info(f'[Inpaint] Parameterized inpaint is disabled.')
                     if inpaint_additional_prompt != '':
                         if prompt == '':
                             prompt = inpaint_additional_prompt
@@ -406,8 +410,8 @@ def worker():
         if advanced_parameters.overwrite_height > 0:
             height = advanced_parameters.overwrite_height
 
-        print(f'[Parameters] Sampler = {sampler_name} - {scheduler_name}')
-        print(f'[Parameters] Steps = {steps} - {switch}')
+        logger.info(f'[Parameters] Sampler = {sampler_name} - {scheduler_name}')
+        logger.info(f'[Parameters] Steps = {steps} - {switch}')
 
         progressbar(async_task, 1, 'Initializing ...')
 
@@ -480,7 +484,7 @@ def worker():
                 for i, t in enumerate(tasks):
                     progressbar(async_task, 5, f'Preparing Fooocus text #{i + 1} ...')
                     expansion = pipeline.final_expansion(t['task_prompt'], t['task_seed'])
-                    print(f'[Prompt Expansion] {expansion}')
+                    logger.info(f'[Prompt Expansion] {expansion}')
                     t['expansion'] = expansion
                     t['positive'] = copy.deepcopy(t['positive']) + [expansion]  # Deep copy.
 
@@ -508,10 +512,10 @@ def worker():
 
             shape_ceil = get_image_shape_ceil(uov_input_image)
             if shape_ceil < 1024:
-                print(f'[Vary] Image is resized because it is too small.')
+                logger.info(f'[Vary] Image is resized because it is too small.')
                 shape_ceil = 1024
             elif shape_ceil > 2048:
-                print(f'[Vary] Image is resized because it is too big.')
+                logger.info(f'[Vary] Image is resized because it is too big.')
                 shape_ceil = 2048
 
             uov_input_image = set_image_shape_ceil(uov_input_image, shape_ceil)
@@ -530,13 +534,13 @@ def worker():
             B, C, H, W = initial_latent['samples'].shape
             width = W * 8
             height = H * 8
-            print(f'Final resolution is {str((height, width))}.')
+            logger.info(f'Final resolution is {str((height, width))}.')
 
         if 'upscale' in goals:
             H, W, C = uov_input_image.shape
             progressbar(async_task, 13, f'Upscaling image from {str((H, W))} ...')
             uov_input_image = perform_upscale(uov_input_image)
-            print(f'Image upscaled.')
+            logger.info(f'Image upscaled.')
 
             if '1.5x' in uov_method:
                 f = 1.5
@@ -548,7 +552,7 @@ def worker():
             shape_ceil = get_shape_ceil(H * f, W * f)
 
             if shape_ceil < 1024:
-                print(f'[Upscale] Image is resized because it is too small.')
+                logger.info(f'[Upscale] Image is resized because it is too small.')
                 uov_input_image = set_image_shape_ceil(uov_input_image, 1024)
                 shape_ceil = 1024
             else:
@@ -559,7 +563,7 @@ def worker():
             if 'fast' in uov_method:
                 direct_return = True
             elif image_is_super_large:
-                print('Image is too large. Directly returned the SR image. '
+                logger.info('Image is too large. Directly returned the SR image. '
                       'Usually directly return SR image at 4K resolution '
                       'yields better results than SDXL diffusion.')
                 direct_return = True
@@ -594,7 +598,7 @@ def worker():
             B, C, H, W = initial_latent['samples'].shape
             width = W * 8
             height = H * 8
-            print(f'Final resolution is {str((height, width))}.')
+            logger.info(f'Final resolution is {str((height, width))}.')
 
         if 'inpaint' in goals:
             if len(outpaint_selections) > 0:
@@ -684,7 +688,7 @@ def worker():
             B, C, H, W = latent_fill.shape
             height, width = H * 8, W * 8
             final_height, final_width = inpaint_worker.current_task.image.shape[:2]
-            print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
+            logger.info(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'cn' in goals:
             for task in cn_tasks[flags.cn_canny]:
@@ -743,7 +747,7 @@ def worker():
                 pipeline.final_unet = ip_adapter.patch_model(pipeline.final_unet, all_ip_tasks)
 
         if advanced_parameters.freeu_enabled:
-            print(f'FreeU is enabled!')
+            logger.info(f'FreeU is enabled!')
             pipeline.final_unet = core.apply_freeu(
                 pipeline.final_unet,
                 advanced_parameters.freeu_b1,
@@ -754,17 +758,17 @@ def worker():
 
         all_steps = steps * image_number
 
-        print(f'[Parameters] Denoising Strength = {denoising_strength}')
+        logger.info(f'[Parameters] Denoising Strength = {denoising_strength}')
 
         if isinstance(initial_latent, dict) and 'samples' in initial_latent:
             log_shape = initial_latent['samples'].shape
         else:
             log_shape = f'Image Space {(height, width)}'
 
-        print(f'[Parameters] Initial Latent shape: {log_shape}')
+        logger.info(f'[Parameters] Initial Latent shape: {log_shape}')
 
         preparation_time = time.perf_counter() - execution_start_time
-        print(f'Preparation time: {preparation_time:.2f} seconds')
+        logger.info(f'Preparation time: {preparation_time:.2f} seconds')
 
         final_sampler_name = sampler_name
         final_scheduler_name = scheduler_name
@@ -781,7 +785,7 @@ def worker():
                     pipeline.final_refiner_unet,
                     sampling='lcm',
                     zsnr=False)[0]
-            print('Using lcm scheduler.')
+            logger.info('Using lcm scheduler.')
 
         async_task.yields.append(['preview', (13, 'Moving model to GPU ...', None)])
 
@@ -874,11 +878,11 @@ def worker():
                 )
             except InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
-                    print('Task skipped')
+                    logger.info('Task skipped')
                     async_task.yields.append(['skipped', (100 / len(tasks) * (current_task_id + 1), "Task skipped")])
                     continue
                 else:
-                    print('Task stopped')
+                    logger.info('Task stopped')
                     async_task.yields.append(['stopped', "Task stopped"])
                     break
             finally:
@@ -887,7 +891,7 @@ def worker():
                 shared.state["preview_count"] = 0
 
             execution_time = time.perf_counter() - execution_start_time
-            print(f'Generating and saving time: {execution_time:.2f} seconds')
+            logger.info(f'Generating and saving time: {execution_time:.2f} seconds')
 
         return
 
@@ -1015,10 +1019,10 @@ def worker():
 
         ruined_pipeline = modules.pipelines.update(gen_data)
         if ruined_pipeline == None:
-            print(f"ERROR: No pipeline")
+            logger.info(f"ERROR: No pipeline")
             return
         if isinstance(ruined_pipeline, modules.pipelines.NoPipeLine):
-            print(f"ERROR: No pipeline")
+            logger.info(f"ERROR: No pipeline")
             return
 
         try:
@@ -1041,7 +1045,7 @@ def worker():
         progressbar(async_task, 1, f"Loading base model: {gen_data['base_model_name']}")
         _load_base_model = getattr(ruined_pipeline, "load_base_model", None)
         if not callable(_load_base_model):
-            print(f"ERROR: No load_base_model for pipeline")
+            logger.info(f"ERROR: No load_base_model for pipeline")
             return
         gen_data["modelhash"] = ruined_pipeline.load_base_model(gen_data["base_model_name"])
         progressbar(async_task, 1, "Loading LoRA models ...")
@@ -1092,7 +1096,7 @@ def worker():
                 width = gen_data["input_image"].width
                 height = gen_data["input_image"].height
             else:
-                print(f"WARNING: CheatCode selected but no Input image selected. Ignoring PowerUp!")
+                logger.info(f"WARNING: CheatCode selected but no Input image selected. Ignoring PowerUp!")
                 gen_data["cn_selection"] = "None"
                 gen_data["cn_type"] = "None"
 
@@ -1208,11 +1212,11 @@ def worker():
                     )
                 except InterruptProcessingException as e:
                     if shared.last_stop == 'skip':
-                        print('User skipped')
+                        logger.info('User skipped')
                         async_task.yields.append(['skipped', (100 / max(image_number, 1) * (i + 1), "User skipped")])
                         continue
                     else:
-                        print('User stopped')
+                        logger.info('User stopped')
                         async_task.yields.append(['stopped', "User stopped"])
                         break
 
@@ -1228,10 +1232,12 @@ def worker():
                 script_callbacks.before_task_callback(task.task_id)
                 if task.task_type == 'sd3' or task.task_type == 'flux':
                     pipeline.clear_pipeline()
-                    ruined_handler(task)
+                    with memory_context_manager("Ruined Handler"):
+                        ruined_handler(task)
                 else:
                     modules.pipelines.clear_pipeline()
-                    handler(task)
+                    with memory_context_manager("Focus Handler"):
+                        handler(task)
                 task.yields.append(['finish', task.results])
             except Exception as e:
                 traceback.print_exc()

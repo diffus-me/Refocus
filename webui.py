@@ -28,16 +28,14 @@ from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
 from modules.auth import auth_enabled, check_auth
 from modules import script_callbacks
+from modules.util import setup_logging
 
 from fastapi import FastAPI
 from api import Status, QueuingStatus, Progress, create_api
 
-import logging.config
 
-
-with open(os.path.join(os.path.dirname(__file__), "log_conf.yml"), "r") as f:
-    logging.config.dictConfig(yaml.safe_load(f.read()))
-logger = logging.getLogger("uvicorn.error")
+setup_logging()
+logger = logging.getLogger("default")
 
 
 async def generate_clicked(
