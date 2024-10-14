@@ -42,3 +42,4 @@ gpytoolbox==0.3.2
 pynim==1.0.5
 slangtorch==1.2.3
 numpy-stl==3.1.2
+redis~=5.1.1

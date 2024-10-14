@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 from modules.util import generate_temp_filename
+from modules.gallery import register
 from modules.nsfw import nsfw_blur
 from modules import script_callbacks
 from typing import TYPE_CHECKING
@@ -46,6 +47,9 @@ def log(img, meta, async_task: "AsyncTask"):
     metadata.add_text("parameters", json.dumps(meta))
     # html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
     pil_image.save(local_temp_filename, pnginfo=metadata)
+
+    register(async_task, {"parameters": meta}, local_temp_filename)
+
     script_callbacks.image_saved_callback(
         script_callbacks.ImageSaveParams(
             image=img, filename=local_temp_filename, task_metadata=async_task.metadata

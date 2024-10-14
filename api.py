@@ -977,8 +977,8 @@ def create_api(
         await websocket.accept()
         previous_status = None
         output_dir = None
-        if user_id != "local" and settings.output_base_dir:
-            output_dir = os.path.join(settings.output_base_dir, get_user_subdir(user_id), "outputs", "focus")
+        if user_id != "local" and settings.workdir_jfs_target and settings.workdir_name:
+            output_dir = os.path.join(settings.workdir_jfs_target, settings.workdir_name, get_user_subdir(user_id), "outputs", "focus")
         try:
             if task_id:
                 async for progress in recover_task(task_id):
@@ -1381,8 +1381,8 @@ def create_api(
     ):
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not identify user.")
-        if user_id != "local" and settings.output_base_dir:
-            output_dir = os.path.join(settings.output_base_dir, get_user_subdir(user_id), "inputs", "focus")
+        if user_id != "local" and settings.workdir_jfs_target and settings.workdir_name:
+            output_dir = os.path.join(settings.workdir_jfs_target, settings.workdir_name, get_user_subdir(user_id), "inputs", "focus")
             if subdir:
                 output_dir = os.path.join(output_dir, subdir)
         else:
