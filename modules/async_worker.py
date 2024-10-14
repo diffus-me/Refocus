@@ -1064,7 +1064,7 @@ def worker():
             gen_data = perf_options
 
         # TODO: Put this in config
-        if model_info.sha256.lower() == "ead426278b49030e9da5df862994f25ce94ab2ee4df38b556ddddb3db093bf72":
+        if model_info.base and model_info.base.lower() == "flux.1 s":
             if gen_data["performance_selection"].lower() == "speed":
                 gen_data["custom_steps"] = 10
             elif gen_data["performance_selection"].lower() == "quality":
