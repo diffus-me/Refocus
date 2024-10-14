@@ -80,7 +80,7 @@ def prepare_environment():
         "COMFY_REPO", "https://github.com/comfyanonymous/ComfyUI"
     )
     comfy_commit_hash = os.environ.get(
-        "COMFY_COMMIT_HASH", "39fb74c5bd13a1dccf4d7293a2f7a755d9f43cbd"
+        "COMFY_COMMIT_HASH", "191a0d56b4fc167d5852c0b936964b198c02cc0c"
     )
     sf3d_repo = os.environ.get(
         "SF3D_REPO", "https://github.com/Stability-AI/stable-fast-3d.git"

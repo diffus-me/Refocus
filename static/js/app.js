@@ -230,7 +230,7 @@ createApp({
   },
   methods: {
     getGenerateButtonColor() {
-      if (this.sd3.enabled) {
+      if (this.taskType === "sd3") {
         return this.sd3.background;
       } else if (this.taskType === "flux") {
         return this.flux.background;
@@ -239,7 +239,7 @@ createApp({
       }
     },
     getGenerateButtonTextColor() {
-      if (this.sd3.enabled) {
+      if (this.taskType === "sd3") {
         return this.sd3.textColor;
       } else if (this.taskType === "flux") {
         return this.flux.textColor;
@@ -779,9 +779,11 @@ createApp({
       return genParams;
     },
     async startToGenerate(retry) {
-      if (this.sd3.enabled) {
-        this.generateSD3();
-        return;
+      if (this.taskType === "sd3") {
+          const is_allowed = await this.checkPermission("SD3");
+          if (!is_allowed) {
+            return;
+          }
       }
 
       if (this.taskType === "flux") {
@@ -1752,15 +1754,15 @@ createApp({
       this.estimateBlipConsume.inference = result.inference;
       this.estimateBlipConsume.discount = result.discount;
     },
-    updateSD3EstimateConsume() {
-      const estimateConsume = { discount: 0.25, imageNumber: this.imageNumber };
-      if (this.sd3.baseModel === "sd3") {
-        estimateConsume.inference = 26 * this.imageNumber;
-      } else if (this.sd3.baseModel === "sd3-turbo") {
-        estimateConsume.inference = 16 * this.imageNumber;
-      }
-      this.sd3.estimateConsume = estimateConsume;
-    },
+    //updateSD3EstimateConsume() {
+    //  const estimateConsume = { discount: 0.25, imageNumber: this.imageNumber };
+    //  if (this.sd3.baseModel === "sd3") {
+    //    estimateConsume.inference = 26 * this.imageNumber;
+    //  } else if (this.sd3.baseModel === "sd3-turbo") {
+    //    estimateConsume.inference = 16 * this.imageNumber;
+    //  }
+    //  this.sd3.estimateConsume = estimateConsume;
+    //},
     async requestGptVisionCreditsConsumption(args) {
       const response = await fetch("/api/v3/gpt/vision/prompt/credits", {
         method: "POST",
@@ -1993,9 +1995,6 @@ createApp({
     },
     numImagePrompts: {
       get() {
-        if (this.sd3.enabled) {
-          return 1;
-        }
         return this._numImagePrompts;
       },
       set(value) {
@@ -2016,11 +2015,6 @@ createApp({
       }
     },
     taskType(newType, oldType) {
-      if (newType.toLowerCase() === "sd3") {
-        this.sd3.enabled = true;
-      } else {
-        this.sd3.enabled = false;
-      }
       if (newType.toLowerCase() !== "sdxl" && this.imageOptionTab !== "desc") {
         this.imageOptionTab = "desc";
       }
@@ -2054,9 +2048,9 @@ createApp({
       this.$watch(name, this.updateGptVisionEstimateConsume);
     }
 
-    for (let name of ["sd3.baseModel", "imageNumber"]) {
-      this.$watch(name, this.updateSD3EstimateConsume);
-    }
+    //for (let name of ["sd3.baseModel", "imageNumber"]) {
+    //  this.$watch(name, this.updateSD3EstimateConsume);
+    //}
   },
   async mounted() {
     this.updateDefaultOptions("default", this.taskType, () => {

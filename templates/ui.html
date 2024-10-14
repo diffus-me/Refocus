@@ -205,8 +205,8 @@
         <v-row class="pa-3">
           <v-btn-toggle v-model="taskType" mandatory divided :disabled="generating">
             <v-btn color="#5a3cff" value="sdxl" @click="updateDefaultOptions('default', 'sdxl')"> SDXL </v-btn>
-            <v-btn value="sd3" :style="sd3.enabled ? sd3.background : ''">
-                <span :style="sd3.enabled ? 'color: #0c5536;' : ''"> SD3 </span>
+            <v-btn value="sd3" :style="taskType === 'sd3' ? sd3.background : ''" @click="updateDefaultOptions('sd3', 'sd3')">
+                <span :style="taskType === 'sd3' ? 'color: #0c5536;' : ''"> SD3 </span>
             </v-btn>
             <v-btn value="flux" :style="taskType === 'flux'? flux.background : ''" @click="updateDefaultOptions('flux', 'flux')">
                 <span :style="taskType === 'flux'? 'color: #ffffff;' : ''"> Flux </span>
@@ -228,9 +228,9 @@
                   <v-icon :color="imageOptionsCloseButtonHover ? 'white' : 'grey'" icon="mdi-close"></v-icon>
                 </v-row>
                 <v-tabs vertical v-model="imageOptionTab">
-                  <v-tab v-if="!sd3.enabled && taskType === 'sdxl'" value="uov">Upscale or Variation</v-tab>
+                  <v-tab v-if="taskType === 'sdxl'" value="uov">Upscale or Variation</v-tab>
                   <v-tab v-if="taskType === 'sdxl'" value="ip">Image Prompt</v-tab>
-                  <v-tab v-if="!sd3.enabled && taskType === 'sdxl'" value="inpaint">Inpaint or Outpaint</v-tab>
+                  <v-tab v-if="taskType === 'sdxl'" value="inpaint">Inpaint or Outpaint</v-tab>
                   <v-tab value="desc">Describe</v-tab>
                 </v-tabs>
                 <v-window v-model="imageOptionTab">
@@ -316,7 +316,7 @@
                               :cover="imagePromptImages[index - 1]? false: true"
                               height="480"
                             ></v-img>
-                            <v-expansion-panels v-if="!sd3.enabled" v-model="imagePromptAdvancedPanel">
+                            <v-expansion-panels v-if="taskType === 'sdxl'" v-model="imagePromptAdvancedPanel">
                               <v-expansion-panel value="advanced">
                                 <v-expansion-panel-title>Advanced Options</v-expansion-panel-title>
                                 <v-expansion-panel-text>
@@ -379,7 +379,7 @@
                                 </v-expansion-panel-text>
                               </v-expansion-panel>
                             </v-expansion-panels>
-                            <v-container v-else>
+                            <!--<v-container v-else>
                               <v-slider
                                 v-model="sd3.strength"
                                 :min="0"
@@ -398,7 +398,7 @@
                                   ></v-text-field>
                                 </template>
                               </v-slider>
-                            </v-container>
+                            </v-container>-->
                           </v-card-text>
                         </v-card>
                       </v-col>
@@ -631,9 +631,9 @@
               :style="getGenerateButtonColor()"
               :disabled="loadingPreset"
             >
-              <span v-if="sd3.enabled" style="white-space: normal; color: #0c5536;">
+              <span v-if="taskType === 'sd3'" style="white-space: normal; color: #0c5536;">
                 Generate SD3 <br/>
-                <span class="text-caption" v-html="getConsumeText(this.sd3.estimateConsume, this.sd3.estimateConsume.imageNumber)">
+                <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
                 </span>
               </span>
               <span v-else-if="taskType === 'flux'" style="white-space: normal; color: #ffffff;">
@@ -649,10 +649,10 @@
             </v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">
             <v-col class="d-flex pa-0 mr-1">
-              <v-btn @click="skipGeneration" :loading="skipLoading" :disabled="sd3.enabled" width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
+              <v-btn @click="skipGeneration" :loading="skipLoading"  width="100%" height="56px" color="grey-lighten-1">Skip</v-btn>
             </v-col>
             <v-col class="d-flex pa-0 ml-1">
-              <v-btn @click="stopGeneration" :loading="stopLoading" :disabled="sd3.enabled" width="100%" height="56px" color="red-lighten-1">Stop</v-btn>
+              <v-btn @click="stopGeneration" :loading="stopLoading"  width="100%" height="56px" color="red-lighten-1">Stop</v-btn>
             </v-col>
             </v-row>
           </v-col>
@@ -669,7 +669,7 @@
             >
               Options
               <v-chip
-                v-show="!selectingPreset && !loadingPreset && !sd3.enabled"
+                v-show="!selectingPreset && !loadingPreset"
                 id="preset-clip"
                 class="ma-2"
                 :color="presetColor[selectedPreset]"
@@ -677,7 +677,7 @@
               >
                 [[ presetName[selectedPreset] ]]
               </v-chip>
-              <div v-show="selectingPreset && !loadingPreset && !sd3.enabled">
+              <div v-show="selectingPreset && !loadingPreset">
                 <v-chip
                   v-for="preset in availablePresets"
                   :key="preset"
@@ -695,7 +695,7 @@
                 color="#5a3cff"
               ></v-progress-circular>
             </v-expansion-panel-title>
-            <v-expansion-panel-text v-if="!sd3.enabled">
+            <v-expansion-panel-text>
               <v-tabs vertical v-model="settingTab">
                 <v-tab value="settings">Settings</v-tab>
                 <v-tab value="styles">Styles</v-tab>
@@ -932,13 +932,12 @@
                     </template>
                   </v-slider>
                   <v-slider
-                    v-if="taskType === 'flux'"
+                    v-if="taskType === 'flux' || taskType === 'sd3'"
                     v-model="clipSkip"
                     :min="1"
                     :max="5"
                     :step="1"
                     label="Clip Skip"
-                    :disabled="taskType === 'flux'"
                   >
                     <template v-slot:append>
                       <v-text-field
@@ -986,7 +985,7 @@
                 </v-window-item>
               </v-window>
             </v-expansion-panel-text>
-            <v-expansion-panel-text v-else>
+            <!-- <v-expansion-panel-text v-else>
               <v-window>
                 <v-select
                   v-model="sd3.baseModel"
@@ -1031,7 +1030,6 @@
                   label="Use Random Seed"
                   @change="toggleRandom"
                 ></v-checkbox>
-                <!-- Random Seed -->
                 <v-text-field
                   v-model="randomSeed"
                   label="Random Seed"
@@ -1039,7 +1037,7 @@
                   type="number"
                 ></v-text-field>
               </v-window>
-            </v-expansion-panel-text>
+            </v-expansion-panel-text> -->
           </v-expansion-panel>
         </v-expansion-panels>
 

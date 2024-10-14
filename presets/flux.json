@@ -34,7 +34,7 @@
     "default_prompt_negative": "",
     "default_styles": [
     ],
-    "default_aspect_ratio": "1152*896",
+    "default_aspect_ratio": "768*1344",
     "checkpoint_downloads": {
         "flux1-schnell-fp8.safetensors": "https://huggingface.co/Comfy-Org/flux1-schnell/blob/main/flux1-schnell-fp8.safetensors"
     },
