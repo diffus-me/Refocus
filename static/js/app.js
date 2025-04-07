@@ -1517,7 +1517,7 @@ createApp({
     },
     async getFeaturePermissions() {
       if (!this._featurePermissions) {
-        const response = await fetch("/config/feature_permissions");
+        const response = await fetch("/app/api/feature-permissions");
         const body = await response.json();
 
         this._featurePermissions = {
