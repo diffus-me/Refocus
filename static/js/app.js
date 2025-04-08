@@ -29,7 +29,7 @@ function _joinTiers(tiers) {
   return _joinWords(unique_tiers, "or");
 }
 
-var notifier = new AWN(notifierGlobalOptions);
+var notifier = new AWN.default(notifierGlobalOptions);
 
 const defaultTheme = {
   dark: true,
