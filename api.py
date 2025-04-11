@@ -1400,7 +1400,7 @@ def create_api(
         except Exception as e:
             return JSONResponse(status_code=500, content={"message": str(e)})
 
-    @app.get("/ui", response_class=HTMLResponse)
+    @app.get("/iframe/focus", response_class=HTMLResponse)
     async def vue_ui(
         request: Request,
         user_id: Annotated[str | None, Header()] = None,
