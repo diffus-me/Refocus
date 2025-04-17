@@ -387,7 +387,7 @@ createApp({
         allow_promotion_codes: true,
         current_url: window.location.href,
       });
-      return `/pricing_table/checkout?${params.toString()}`;
+      return `/api/server/pricing_table/checkout?${params.toString()}`;
     },
     openPopup(event, title, message, confirmText, url) {
       const popup = this.popup;
