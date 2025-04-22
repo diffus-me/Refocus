@@ -554,11 +554,7 @@
                             :loading="describeImageLoading"
                             @click="describeImageLocal"
                           >
-                            <span style="white-space: normal;">
-                              Describe into Prompt (BLIP)<br/>
-                              <span class="text-caption" v-html="getConsumeText(this.estimateBlipConsume)">
-                              </span>
-                            </span>
+                            <span style="white-space: normal;"> Describe into Prompt (BLIP) </span>
                           </v-btn>
                         </div>
                         <div class="ma-4">
@@ -571,8 +567,7 @@
                             @click="describeImageGptVision"
                           >
                             <span style="white-space: normal;">
-                              Describe into Prompt (GPT-4 Vision)<span v-show="gptVisionTask.queueLength">([[ gptVisionTask.position ]]/[[ gptVisionTask.length ]])</span><br/>
-                              <span class="text-caption" v-html="getConsumeText(this.estimateGptVisionConsume)"></span>
+                              Describe into Prompt (GPT-4 Vision)<span v-show="gptVisionTask.queueLength">([[ gptVisionTask.position ]]/[[ gptVisionTask.length ]])</span>
                             </span>
                           </v-btn>
                         </div>
@@ -640,19 +635,13 @@
               :disabled="loadingPreset"
             >
               <span v-if="taskType === 'sd3'" style="white-space: normal; color: #0c5536;">
-                Generate SD3 <br/>
-                <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
-                </span>
+                Generate SD3
               </span>
               <span v-else-if="taskType === 'flux'" style="white-space: normal; color: #ffffff;">
-                Generate Flux<br/>
-                <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
-                </span>
+                Generate Flux
               </span>
               <span v-else style="white-space: normal;">
-                Generate <br/>
-                <span class="text-caption" v-html="getConsumeText(this.estimateConsume, this.estimateConsume.imageNumber)">
-                </span>
+                Generate
               </span>
             </v-btn>
             <v-row v-if="generating" class="d-flex pa-0 ma-0" width="100%">

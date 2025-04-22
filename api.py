@@ -999,12 +999,15 @@ def create_api(
                 script_callbacks.before_task_callback(task_id)
                 args = await prepare_args_for_generate(generation_option, user_id)
                 function_name, decoded_params = _get_consume_args(generation_option)
+
+                credits_output: dict[str, int | None] = {}
                 async with system_monitor.monitor_call_context(
                     request_headers=request_headers,
                     api_name=function_name,
                     function_name=function_name,
                     task_id=generation_option.task_id,
                     is_intermediate=False,
+                    output_container=credits_output
                 ) as task_logger:
                     result_dict = {}
                     result_images = []
@@ -1027,8 +1030,12 @@ def create_api(
                                 )
                                 generate_progress = await extract_progress(progress, is_url, user_id, start_time)
                                 result_dict = generate_progress.dict()
-                                await websocket.send_json(result_dict)
+
+                                if result_dict["status"] != "finish":
+                                    await websocket.send_json(result_dict)
+
                                 result_images = progress.status.image_filepaths
+
                             step_logger(result_images, result_dict.get('status', 'failed') == 'failed')
 
                             task_logger(result_images, result_dict.get('status', 'failed') == 'failed')
@@ -1040,6 +1047,11 @@ def create_api(
                                 "exception": traceback.format_exc(),
                             }, True)
                             raise
+
+                if result_dict["status"] == "finish":
+                    result_dict["credits"] = credits_output["credits"]
+                    await websocket.send_json(result_dict)
+
         except WebSocketDisconnect:
             print("Client disconnected")
         except system_monitor.MonitorException as error:

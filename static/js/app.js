@@ -167,21 +167,6 @@ createApp({
         src: "",
       },
       nonLCMArguments: {},
-      estimateConsume: {
-        args: {},
-        timeoutId: null,
-        inference: "-",
-        discount: 0,
-        imageNumber: 2,
-      },
-      estimateBlipConsume: {
-        inference: "-",
-        discount: 0,
-      },
-      estimateGptVisionConsume: {
-        inference: "-",
-        discount: 0,
-      },
       gptVisionTask: {
         task_id: null,
         queueLength: 0,
@@ -216,11 +201,6 @@ createApp({
         aspectRatio: "1:1",
         aspectRatios: [],
         strength: 0.5,
-        estimateConsume: {
-          inference: "-",
-          discount: 0,
-          imageNumber: 2,
-        },
         background:
           "background: linear-gradient(270deg, rgb(0, 255, 239) 0%, rgb(0, 255, 132) 100%)",
         textColor: "#0c5536",
@@ -819,10 +799,6 @@ createApp({
               task_type: this.taskType,
             }),
         );
-        reportSpendCreditsEvent(
-          "refocus_generate_button",
-          this.estimateConsume.inference,
-        );
       }
       this.generating = true;
       this.runningTaskMessage = "Preparing...";
@@ -884,6 +860,9 @@ createApp({
             this.runningTaskResultImages = status.images.map((item) => {
               return { src: item.encoded_image, id: item.image_id };
             });
+          }
+          if (status.credits) {
+            reportSpendCreditsEvent("refocus_generate_button", status.credits);
           }
           await this.checkNSFW(status.is_nsfw);
           this.pushHistory();
@@ -1425,25 +1404,6 @@ createApp({
           }
         });
     },
-    getConsumeText(consume, image_number = null) {
-      const inference = consume.inference;
-      const discount = consume.discount;
-
-      const real_inference =
-        discount === 0 ? inference : Math.ceil(inference * (1 - discount));
-      const credit_unit = `credit${real_inference === 1 ? "" : "s"}`;
-
-      let result =
-        discount === 0
-          ? `Estimated ${real_inference} ${credit_unit}`
-          : `Estimated <del>${inference}</del> ${real_inference} ${credit_unit}`;
-
-      if (image_number) {
-        const image_unit = `image${image_number === 1 ? "" : "s"}`;
-        result = `${result} for ${image_number} ${image_unit}`;
-      }
-      return `(${result})`;
-    },
     getShapeCeil(width, height) {
       return Math.ceil(Math.sqrt(width * height) / 64.0) * 64.0;
     },
@@ -1471,31 +1431,6 @@ createApp({
         Turbo: 1,
       };
       return mapping[this.performance];
-    },
-    async requestCreditsConsumption(args) {
-      const body = {
-        ...args,
-        link_params: {},
-        mutipliers: {},
-        link_mutipliers: {},
-      };
-
-      const response = await fetch("/api/tasks/credits_consumption", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ functions: args }),
-      });
-      if (response.status != 200) {
-        return { inference: "-", discount: 0 };
-      }
-      const result = await response.json();
-      return {
-        inference: result.inference,
-        discount: result.discount ? result.discount : 0,
-      };
     },
     async getUserOrderInformation() {
       return fetch("/api/order_info", {
@@ -1538,270 +1473,6 @@ createApp({
         );
       }
       return this._featurePermissions;
-    },
-    async getImageOptionsConsumeArgs() {
-      if (!this.showImageOptions) {
-        return;
-      }
-      if (this.imageOptionTab === "uov") {
-        if (!this.uovImageFile) {
-          return;
-        }
-        let [width, height] = await this.getImageResolution(this.uovImageFile);
-        if (this.uovSelection.includes("Vary")) {
-          const shapeCeil = this.getShapeCeil(width, height);
-          if (shapeCeil <= 1024) {
-            width = 1024;
-            height = 1024;
-          } else if (shapeCeil >= 2048) {
-            width = 2048;
-            height = 2048;
-          }
-          return {
-            "fooocus.vary": {
-              params: {
-                width: width,
-                height: height,
-                steps_coefficient: this.getStepsCoefficient(),
-                image_number: this.imageNumber,
-              },
-            },
-          };
-        }
-        if (this.uovSelection.includes("Upscale")) {
-          const scale = this.uovSelection.includes("1.5") ? 1.5 : 2.0;
-          width *= scale;
-          height *= scale;
-
-          let is_fast = this.uovSelection.includes("Fast");
-
-          let shapeCeil = this.getShapeCeil(width, height);
-          if (shapeCeil <= 1024) {
-            width = 1024;
-            height = 1024;
-          } else if (shapeCeil > 2800) {
-            is_fast = true;
-          }
-          let steps_coefficient = 0;
-          let image_number = 1;
-          if (!is_fast) {
-            steps_coefficient = this.getStepsCoefficient();
-            image_number = this.imageNumber;
-          }
-
-          return {
-            "fooocus.upscale": {
-              params: {
-                width: width,
-                height: height,
-                steps_coefficient: steps_coefficient,
-                image_number: image_number,
-              },
-            },
-          };
-        }
-        return;
-      }
-      if (this.imageOptionTab === "inpaint") {
-        if (!this.inpaintImageUploader) {
-          return;
-        }
-        let [width, height] = await this.getImageResolution(
-          this.inpaintImageUploader,
-        );
-
-        if (this.inpaintSelection === "Inpaint or Outpaint (default)") {
-          let scale = 0;
-          if (this.outpaintDirection.includes("Top")) {
-            scale += 0.3;
-          }
-          if (this.outpaintDirection.includes("Bottom")) {
-            scale += 0.3;
-          }
-          height += height * scale;
-
-          scale = 0;
-          if (this.outpaintDirection.includes("Left")) {
-            scale += 0.3;
-          }
-          if (this.outpaintDirection.includes("Right")) {
-            scale += 0.3;
-          }
-          width += height * scale;
-        }
-        return {
-          "fooocus.inpaint": {
-            params: {
-              width: Math.floor(width),
-              height: Math.floor(height),
-              steps_coefficient: this.getStepsCoefficient(),
-              image_number: this.imageNumber,
-            },
-          },
-        };
-      }
-      if (this.imageOptionTab === "ip") {
-        let ip_ctrls = 0;
-        for (const imagePromptUploader of this.imagePromptImages) {
-          if (imagePromptUploader) {
-            ip_ctrls += 1;
-          }
-        }
-        const [width, height] = this.getTargetResolution();
-        return {
-          fooocus: {
-            params: {
-              width: width,
-              height: height,
-              steps_coefficient: this.getStepsCoefficient(),
-              ip_ctrls: ip_ctrls,
-              image_number: this.imageNumber,
-            },
-          },
-        };
-      }
-      return;
-    },
-    async updateEstimateConsume(_) {
-      let args = await this.getImageOptionsConsumeArgs();
-      if (!args) {
-        const [width, height] = this.getTargetResolution();
-        if (this.taskType === "sd3") {
-          args = {
-            "fooocus.sd3": {
-              params: {
-                width: width,
-                height: height,
-                steps_coefficient: this.getStepsCoefficient(),
-                ip_ctrls: 0,
-                image_number: this.imageNumber,
-                ratio: 1.5,
-              },
-            },
-          };
-        } else if (this.taskType === "flux") {
-          args = {
-            "fooocus.flux": {
-              params: {
-                width: width,
-                height: height,
-                steps_coefficient: this.getStepsCoefficient(),
-                ip_ctrls: 0,
-                image_number: this.imageNumber,
-                ratio: 2,
-              },
-            },
-          };
-        } else {
-          args = {
-            fooocus: {
-              params: {
-                width: width,
-                height: height,
-                steps_coefficient: this.getStepsCoefficient(),
-                ip_ctrls: 0,
-                image_number: this.imageNumber,
-                ratio: 1,
-              },
-            },
-          };
-        }
-      }
-      if (JSON.stringify(args) === JSON.stringify(this.estimateConsume.args)) {
-        return;
-      }
-      this.estimateConsume.args = args;
-      if (this.estimateConsume.timeoutId !== null) {
-        clearTimeout(this.estimateConsume.timeoutId);
-      }
-      this.estimateConsume.timeoutId = setTimeout(async () => {
-        let request_args = this.estimateConsume.args;
-        this.estimateConsume.imageNumber =
-          Object.values(request_args)[0].params.image_number;
-        const result = await this.requestCreditsConsumption(request_args);
-        this.estimateConsume.inference = result.inference;
-        this.estimateConsume.discount = result.discount;
-        this.estimateConsume.timeoutId = null;
-      }, 1000);
-    },
-    async updateBlipEstimateConsume(_) {
-      if (!this.showImageOptions) {
-        this.estimateBlipConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      if (this.imageOptionTab != "desc") {
-        this.estimateBlipConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      if (!this.describeImageUploader) {
-        this.estimateBlipConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      let [width, height] = await this.getImageResolution(
-        this.describeImageUploader,
-      );
-      args = {
-        "fooocus.describe.blip": {
-          params: {
-            width: width,
-            height: height,
-          },
-        },
-      };
-      const result = await this.requestCreditsConsumption(request_args);
-      this.estimateBlipConsume.inference = result.inference;
-      this.estimateBlipConsume.discount = result.discount;
-    },
-    //updateSD3EstimateConsume() {
-    //  const estimateConsume = { discount: 0.25, imageNumber: this.imageNumber };
-    //  if (this.sd3.baseModel === "sd3") {
-    //    estimateConsume.inference = 26 * this.imageNumber;
-    //  } else if (this.sd3.baseModel === "sd3-turbo") {
-    //    estimateConsume.inference = 16 * this.imageNumber;
-    //  }
-    //  this.sd3.estimateConsume = estimateConsume;
-    //},
-    async requestGptVisionCreditsConsumption(args) {
-      const response = await fetch("/api/v3/gpt/vision/prompt/credits", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(args),
-      });
-      if (response.status != 200) {
-        return { inference: "-", discount: 0 };
-      }
-      const result = await response.json();
-      return {
-        inference: result.inference,
-        discount: result.discount ? result.discount : 0,
-      };
-    },
-    async updateGptVisionEstimateConsume(_) {
-      if (!this.showImageOptions) {
-        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      if (this.imageOptionTab != "desc") {
-        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      if (!this.describeImageUploader) {
-        this.estimateGptVisionConsume = { inference: "-", discount: 0 };
-        return;
-      }
-      let [width, height] = await this.getImageResolution(
-        this.describeImageUploader,
-      );
-      const args = {
-        width: width,
-        height: height,
-      };
-      const result = await this.requestGptVisionCreditsConsumption(args);
-      this.estimateGptVisionConsume.inference = result.inference;
-      this.estimateGptVisionConsume.discount = result.discount;
     },
     openSubscriptionPage() {
       addUpgradeGtagEvent(this.popup.url, this.popup.itemName);
@@ -2017,38 +1688,6 @@ createApp({
         this.imageOptionTab = "desc";
       }
     },
-  },
-  created() {
-    for (let name of [
-      "showImageOptions",
-      "imageOptionTab",
-      "uovImageFile",
-      "uovSelection",
-      "performance",
-      "inpaintImageUploader",
-      "inpaintSelection",
-      "outpaintDirection",
-      "aspectRatio",
-      "imageNumber",
-      "taskType",
-    ]) {
-      this.$watch(name, this.updateEstimateConsume);
-    }
-    this.$watch("imagePromptImages", this.updateEstimateConsume, {
-      deep: true,
-    });
-
-    for (let name of [
-      "showImageOptions",
-      "imageOptionTab",
-      "describeImageUploader",
-    ]) {
-      this.$watch(name, this.updateGptVisionEstimateConsume);
-    }
-
-    //for (let name of ["sd3.baseModel", "imageNumber"]) {
-    //  this.$watch(name, this.updateSD3EstimateConsume);
-    //}
   },
   async mounted() {
     this.updateDefaultOptions("default", this.taskType, () => {

@@ -128,15 +128,16 @@ async def _after_task_finished(
         status: str,
         message: Optional[str] = None,
         is_intermediate: bool = False,
-        refund_if_failed: bool = False):
+        refund_if_failed: bool = False
+) -> int | None:
     if job_id is None:
         logger.error(
             'task_id is not present in after_task_finished, there might be error occured in before_task_started.')
-        return
+        return None
     monitor_addr, system_monitor_api_secret = _get_system_monitor_config(request_headers)
     if not monitor_addr or not system_monitor_api_secret:
         logger.error(f'{job_id}: system_monitor_addr or system_monitor_api_secret is not present')
-        return
+        return None
 
     session_hash = request_headers.get('x-session-hash', None)
     if not session_hash:
@@ -170,6 +171,9 @@ async def _after_task_finished(
             resp_text = await resp.text()
             logger.error((f'update monitor log failed, status: monitor_log_id: {job_id}, {resp.status}, '
                           f'message: {resp_text[:min(100, len(resp_text))]}'))
+            return None
+
+        return (await resp.json())["consumptions"]["credit_consumption"]
 
 
 @asynccontextmanager
@@ -183,6 +187,7 @@ async def monitor_call_context(
         refund_if_task_failed: bool = True,
         refund_if_failed: bool = False,
         only_available_for: Optional[list[str]] = None,
+        output_container: dict[str, int | None] | None = None,
 ):
     status = 'unknown'
     message = ''
@@ -224,10 +229,13 @@ async def monitor_call_context(
             message = f'{type(e).__name__}: {str(e)}'
             raise e
         finally:
-            await _after_task_finished(session,
+            credits = await _after_task_finished(session,
                                        request_headers,
                                        task_id,
                                        status,
                                        message,
                                        is_intermediate,
                                        refund_if_failed)
+
+            if output_container is not None:
+                output_container["credits"] = credits
