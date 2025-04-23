@@ -5,13 +5,37 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import requests
-from api import numpy_array_to_base64
 from PIL import Image, ImageFilter
+
+from api import numpy_array_to_base64
+from settings import settings
 
 if TYPE_CHECKING:
     from modules.async_worker import AsyncTask
 
-_NSFW_ALLOWED_TIERS = {"basic", "plus", "pro", "api", "ltd s", "appsumo ltd tier 2"}
+_feature_permissions = None
+
+
+def get_feature_permissions() -> dict[str, Any]:
+    global _feature_permissions
+
+    if _feature_permissions is None:
+        url = settings.feature_permissions_url
+        if not url:
+            message = "Failed to get feature permissions url from env"
+            raise ValueError(message)
+
+        response = requests.get(url)
+        response.raise_for_status()
+        content = response.json()
+
+        _feature_permissions = {
+            "generate": {item["name"]: item for item in content["generate"]},
+            "buttons": {item["name"]: item for item in content["buttons"]},
+            "features": {item["name"]: item for item in content["features"]},
+        }
+
+    return _feature_permissions
 
 
 def _check_nsfw(endpoint: str, image: np.array, prompt: str) -> dict[str, Any]:
@@ -34,7 +58,8 @@ def nsfw_blur(
 ) -> tuple[Image.Image | None, dict[str, Any] | None]:
     assert async_task.metadata is not None
 
-    if async_task.metadata["user-tier"].lower() in _NSFW_ALLOWED_TIERS:
+    allowed_tiers = get_feature_permissions()["features"]["NSFWContent"]["allowed_tiers"]
+    if async_task.metadata["user-tier"] in allowed_tiers:
         return None, None
 
     endpoint = async_task.metadata["x-diffus-api-gateway-endpoint"]
