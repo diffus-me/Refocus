@@ -28,12 +28,12 @@ def get_current_html_path(base_dir: str | None = None):
 
 def log(img, meta, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
-        return False, img, ""
+        return False, img, "", ""
 
     blured_image, nsfw_result = nsfw_blur(img, meta["Prompt"], async_task)
     if blured_image:
         is_nsfw = True
-        return True, np.array(blured_image), ""
+        return True, np.array(blured_image), "", ""
 
     folder = async_task.base_dir or modules.config.path_outputs
     date_string, local_temp_filename, only_name = generate_temp_filename(
@@ -46,17 +46,16 @@ def log(img, meta, async_task: "AsyncTask"):
 
     Image.fromarray(img).save(local_temp_filename, pnginfo=metadata)
 
-    script_callbacks.image_saved_callback(
-        script_callbacks.ImageSaveParams(
-            image=img,
-            filename=local_temp_filename,
-            task=async_task,
-            pnginfo={"parameters": meta},
-            nsfw_result=nsfw_result,
-        )
+    params = script_callbacks.ImageSaveParams(
+        image=img,
+        filename=local_temp_filename,
+        task=async_task,
+        pnginfo={"parameters": meta},
+        nsfw_result=nsfw_result,
     )
+    script_callbacks.image_saved_callback(params)
 
-    return False, img, local_temp_filename
+    return False, img, local_temp_filename, params.image_url
 
     css_styles = (
         "<style>"

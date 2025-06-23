@@ -39,6 +39,9 @@ class ImageSaveParams:
         self.pnginfo = pnginfo
         self.nsfw_result = nsfw_result
 
+        self.image_url: str | None = None
+        """the signed image url from gallery"""
+
 
 ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])
 

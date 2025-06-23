@@ -27,6 +27,7 @@ class AsyncTask:
         self.yields = []
         self.results = []
         self.result_paths = []
+        self.result_urls = []
         self.is_nsfw = []
         self.base_dir: str | None = base_dir
         self.metadata = metadata
@@ -96,10 +97,11 @@ def worker():
         async_task.yields.append([status, (number, text, preview_image)])
 
     def yield_result(
-        async_task,
+        async_task: AsyncTask,
         imgs,
         do_not_show_finished_images=False,
         img_paths: str | list | None = None,
+        img_urls: str | list[str] | None = None,
         is_nsfw: bool | list[bool] | None = None
     ):
         if not isinstance(imgs, list):
@@ -112,6 +114,10 @@ def worker():
                 img_paths = [img_paths]
             async_task.result_paths = async_task.result_paths + img_paths
 
+        if img_urls is not None:
+            if not isinstance(img_urls, list):
+                img_urls = [img_urls]
+            async_task.result_urls = async_task.result_urls + img_urls
 
         if is_nsfw is not None:
             if not isinstance(is_nsfw, list):
@@ -573,8 +579,8 @@ def worker():
 
             if direct_return:
                 d = {"Upscale By": f, "Upscale Mode": "Fast"}
-                is_nsfw, target_image, logged_image_path = log(uov_input_image, d, async_task=async_task)
-                yield_result(async_task, target_image, do_not_show_finished_images=True, img_paths=str(logged_image_path), is_nsfw=is_nsfw)
+                is_nsfw, target_image, logged_image_path, image_url = log(uov_input_image, d, async_task=async_task)
+                yield_result(async_task, target_image, do_not_show_finished_images=True, img_paths=str(logged_image_path), img_urls=image_url, is_nsfw=is_nsfw)
                 return
 
             tiled = True
@@ -838,6 +844,7 @@ def worker():
 
                 img_paths = []
                 target_images = []
+                target_image_urls = []
                 is_nsfw_list = []
                 for x in imgs:
                     meta = {
@@ -866,9 +873,10 @@ def worker():
                         'Version': fooocus_version.version
                     }
 
-                    is_nsfw, target_image, logged_image_path = log(x, meta, async_task=async_task)
+                    is_nsfw, target_image, logged_image_path, image_url = log(x, meta, async_task=async_task)
                     img_paths.append(str(logged_image_path))
                     target_images.append(target_image)
+                    target_image_urls.append(image_url)
                     is_nsfw_list.append(is_nsfw)
 
                 yield_result(
@@ -876,6 +884,7 @@ def worker():
                     target_images,
                     do_not_show_finished_images=(current_task_id == len(tasks) - 1),
                     img_paths=img_paths,
+                    img_urls=target_image_urls,
                     is_nsfw=is_nsfw_list,
                 )
             except InterruptProcessingException as e:
@@ -1173,6 +1182,7 @@ def worker():
 
                     img_paths = []
                     target_images = []
+                    target_image_urls = []
                     is_nsfw_list = []
                     for x in imgs:
                         meta = {
@@ -1202,9 +1212,10 @@ def worker():
                             "Seed": str(seed),
                             "Version": fooocus_version.version,
                         }
-                        is_nsfw, target_image, logged_image_path = log(x, meta, async_task=async_task)
+                        is_nsfw, target_image, logged_image_path, image_url = log(x, meta, async_task=async_task)
                         img_paths.append(str(logged_image_path))
                         target_images.append(target_image)
+                        target_image_urls.append(image_url)
                         is_nsfw_list.append(is_nsfw)
 
                         shared.state["preview_count"] += 1
@@ -1215,6 +1226,7 @@ def worker():
                         target_images,
                         do_not_show_finished_images=(i == max(image_number, 1) - 1),
                         img_paths=img_paths,
+                        img_urls=target_image_urls,
                         is_nsfw=is_nsfw_list,
                     )
                 except InterruptProcessingException as e:

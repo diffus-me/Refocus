@@ -76,6 +76,7 @@ class Status(BaseModel):
     title: str = ""
     images: list[np.ndarray] = []
     image_filepaths: list[str] = []
+    image_urls: list[str] = []
     is_nsfw: list[bool] = []
 
     class Config:
@@ -702,9 +703,7 @@ def get_user_subdir(user_id: str) -> str:
     return f"{encoded_user_path[:2]}/{encoded_user_path[2:4]}/{encoded_user_path[4:6]}/{encoded_user_path}"
 
 
-async def process_result_images(
-    progress: Progress, is_url: bool, user_id: str, start_time: datetime
-) -> list[ImageResult]:
+async def process_result_images(progress: Progress) -> list[ImageResult]:
     images = []
     if progress.status.images:
         for idx, image in enumerate(progress.status.images):
@@ -715,16 +714,10 @@ async def process_result_images(
                     if filepath:
                         image_id = encode_filepath_with_base64(filepath)
 
-                if is_url:
-                    rel_filepath = os.path.join(
-                        "fooocus/outputs/",
-                        get_user_subdir(user_id),
-                        f"{start_time.strftime('%Y-%m-%d')}/{progress.task_id}-{progress.flag}-{progress.status.percentage}-{idx}.jpeg",
+                if len(progress.status.image_urls) == len(progress.status.images) and progress.status.image_urls[idx]:
+                    images.append(
+                        ImageResult(image_url=progress.status.image_urls[idx], image_id=image_id)
                     )
-                    output_path = f"{settings.api_image_dir}/{rel_filepath}"
-                    output_url = f"{settings.s3_prefix}/{rel_filepath}"
-                    await save_numpy_image_to_file(image, output_path)
-                    images.append(ImageResult(image_url=output_url, image_id=image_id))
                 else:
                     images.append(
                         ImageResult(encoded_image=numpy_array_to_base64(image, with_schema=True), image_id=image_id)
@@ -738,15 +731,15 @@ def extract_queue_length(progress: Progress) -> tuple[int | None, int | None]:
     return None, None
 
 
-async def extract_progress(progress: Progress, is_url: bool, user_id: str, start_time: datetime) -> GenerationProgress:
-    images = await process_result_images(progress, is_url, user_id, start_time)
+async def extract_progress(progress: Progress) -> GenerationProgress:
+    images = await process_result_images(progress)
     queue_position, queue_length = extract_queue_length(progress)
     return GenerationProgress(
         task_id=progress.task_id,
         status=progress.flag,
         progress=progress.status.percentage,
         message=progress.status.title,
-        is_url=is_url,
+        is_url=all(image.image_url for image in images),
         images=images,
         queue_length=queue_length,
         queue_position=queue_position,
@@ -967,7 +960,6 @@ def create_api(
         websocket: WebSocket,
         task_id: str | None = None,
         task_type: Literal["sdxl", "sd3", "flux"] | None = None,
-        is_url: bool = False,
         user_id: Annotated[str | None, Header()] = "local",
     ):
         if user_id is None:
@@ -982,7 +974,7 @@ def create_api(
             if task_id:
                 async for progress in recover_task(task_id):
                     previous_status = await update_database(progress, previous_status, user_id)
-                    generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                    generate_progress = await extract_progress(progress)
                     await websocket.send_json(generate_progress.dict())
             else:
                 data = await websocket.receive_text()
@@ -1028,7 +1020,7 @@ def create_api(
                                 previous_status = await update_database(
                                     progress, previous_status, user_id, generation_option
                                 )
-                                generate_progress = await extract_progress(progress, is_url, user_id, start_time)
+                                generate_progress = await extract_progress(progress)
                                 result_dict = generate_progress.dict()
 
                                 if result_dict["status"] != "finish":

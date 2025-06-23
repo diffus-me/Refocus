@@ -106,10 +106,10 @@ async def generate_clicked(
                     flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
             if flag == 'results':
                 yield Progress(
-                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, image_urls=task.result_urls, is_nsfw=task.is_nsfw))
             if flag == 'finish':
                 yield Progress(
-                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, image_urls=task.result_urls, is_nsfw=task.is_nsfw))
                 finished = True
             if flag == 'skipped':
                 percentage, title = product
@@ -155,7 +155,7 @@ async def recover_task(task_id: str):
                 flag='failed', task_id=task_id, status=Status(percentage=100, title='Failed: ' + product, images=[]))
         else:
             yield Progress(
-                flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=task.results, image_filepaths=task.result_paths))
+                flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=task.results, image_filepaths=task.result_paths, image_urls=task.result_urls, is_nsfw=task.is_nsfw))
         task.yields = []
 
     if worker.running_task and worker.running_task.task_id == task_id:
@@ -215,10 +215,10 @@ async def recover_task(task_id: str):
                     flag='preview', task_id=task_id, status=Status(percentage=percentage, title=title, images=[image] if image is not None else []))
             if flag == 'results':
                 yield Progress(
-                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
+                    flag='results', task_id=task_id, status=Status(percentage=100, title='Results', images=product, image_filepaths=task.result_paths, image_urls=task.result_urls, is_nsfw=task.is_nsfw))
             if flag == 'finish':
                 yield Progress(
-                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, is_nsfw=task.is_nsfw))
+                    flag='finish', task_id=task_id, status=Status(percentage=100, title='Finished', images=product, image_filepaths=task.result_paths, image_urls=task.result_urls, is_nsfw=task.is_nsfw))
                 finished = True
             if flag == 'skipped':
                 percentage, title = product
