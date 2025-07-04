@@ -1083,7 +1083,10 @@ def create_api(
             raise
         finally:
             script_callbacks.after_task_callback(task_id)
+        try:
             await websocket.close()
+        except Exception as e:
+            logger.exception(f'un-handled websocket exception: {e.__str__()}')
 
     @app.post("/api/focus/stop", response_class=JSONResponse)
     async def stop_task(task_id: str, user_id: Annotated[str | None, Header()] = "local"):
