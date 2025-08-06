@@ -24,8 +24,6 @@ class ImageSaveParams:
         filename,
         task: "AsyncTask",
         pnginfo: dict[str, Any],
-        *,
-        nsfw_result: dict[str, Any] | None = None,
     ):
         self.image = image
         """the PIL image itself"""
@@ -37,10 +35,9 @@ class ImageSaveParams:
         """task from request"""
 
         self.pnginfo = pnginfo
-        self.nsfw_result = nsfw_result
 
-        self.image_url: str | None = None
-        """the signed image url from gallery"""
+        self.gallery_response: dict[str, Any] | None = None
+        """the response from gallery"""
 
 
 ScriptCallback = namedtuple("ScriptCallback", ["script", "callback"])

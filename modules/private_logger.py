@@ -5,10 +5,9 @@ import json
 import urllib.parse
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from PIL.PngImagePlugin import PngInfo
 from modules.util import generate_temp_filename
-from modules.nsfw import nsfw_blur
 from modules import script_callbacks
 from typing import TYPE_CHECKING
 
@@ -16,6 +15,13 @@ if TYPE_CHECKING:
     from modules.async_worker import AsyncTask
 
 log_cache = {}
+
+
+def blur_image(image: np.array, radius: int = 10) -> np.array:
+    pil_image = Image.fromarray(image)
+    blurred_image = pil_image.filter(ImageFilter.BoxBlur(radius))
+
+    return np.array(blurred_image)
 
 
 def get_current_html_path(base_dir: str | None = None):
@@ -29,11 +35,6 @@ def get_current_html_path(base_dir: str | None = None):
 def log(img, meta, async_task: "AsyncTask"):
     if args_manager.args.disable_image_log:
         return False, img, "", ""
-
-    blured_image, nsfw_result = nsfw_blur(img, meta["Prompt"], async_task)
-    if blured_image:
-        is_nsfw = True
-        return True, np.array(blured_image), "", ""
 
     folder = async_task.base_dir or modules.config.path_outputs
     date_string, local_temp_filename, only_name = generate_temp_filename(
@@ -51,11 +52,17 @@ def log(img, meta, async_task: "AsyncTask"):
         filename=local_temp_filename,
         task=async_task,
         pnginfo={"parameters": meta},
-        nsfw_result=nsfw_result,
     )
     script_callbacks.image_saved_callback(params)
+    gallery_response = params.gallery_response
+    if gallery_response is None:
+        raise ValueError("The Gallery response is None.")
 
-    return False, img, local_temp_filename, params.image_url
+    if gallery_response["is_nsfw"]:
+        is_nsfw = True
+        return True, blur_image(img), "", ""
+
+    return False, img, local_temp_filename, gallery_response["url"]
 
     css_styles = (
         "<style>"
