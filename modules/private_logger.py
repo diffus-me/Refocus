@@ -58,11 +58,14 @@ def log(img, meta, async_task: "AsyncTask"):
     if gallery_response is None:
         raise ValueError("The Gallery response is None.")
 
+    if gallery_response["url"]:
+        return False, img, local_temp_filename, gallery_response["url"]
+
     if gallery_response["is_nsfw"]:
         is_nsfw = True
         return True, blur_image(img), "", ""
 
-    return False, img, local_temp_filename, gallery_response["url"]
+    raise ValueError("Failed to get image url from Gallery response when no NSFW flag.")
 
     css_styles = (
         "<style>"
