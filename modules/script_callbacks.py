@@ -11,7 +11,6 @@ from modules.util import setup_logging
 if TYPE_CHECKING:
     from modules.async_worker import AsyncTask
 
-
 setup_logging()
 logger = logging.getLogger("default")
 exception_records = []
@@ -19,11 +18,11 @@ exception_records = []
 
 class ImageSaveParams:
     def __init__(
-        self,
-        image,
-        filename,
-        task: "AsyncTask",
-        pnginfo: dict[str, Any],
+            self,
+            image,
+            filename,
+            task: "AsyncTask",
+            pnginfo: dict[str, Any],
     ):
         self.image = image
         """the PIL image itself"""
@@ -50,6 +49,7 @@ callback_map = dict(
     callbacks_before_task=[],
     callbacks_after_task=[],
     callbacks_image_saved=[],
+    callbacks_cuda_error=[],
 )
 
 
