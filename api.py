@@ -720,7 +720,7 @@ async def process_result_images(progress: Progress) -> list[ImageResult]:
                     )
                 else:
                     images.append(
-                        ImageResult(encoded_image=numpy_array_to_base64(image, with_schema=True), image_id=image_id)
+                        ImageResult(encoded_image=numpy_array_to_base64(image, format="webp", with_schema=True), image_id=image_id)
                     )
     return images
 
@@ -1010,6 +1010,7 @@ def create_api(
                         decoded_params=decoded_params,
                     ) as step_logger:
                         try:
+                            preview_count = 0
                             async for progress in generate_clicked(
                                 *args,
                                 base_dir=output_dir,
@@ -1017,6 +1018,13 @@ def create_api(
                                 metadata=request_headers,
                                 task_type=generation_option.task_type,
                             ):
+                                if progress.flag == "preview":
+                                    preview_count += 1
+                                    if (preview_count - 1) % 3 != 0:
+                                        continue
+                                else:
+                                    preview_count = 0
+
                                 previous_status = await update_database(
                                     progress, previous_status, user_id, generation_option
                                 )
