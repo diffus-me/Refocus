@@ -1273,9 +1273,14 @@ def worker():
                 script_callbacks.after_task_callback(task.task_id)
                 running_task = None
                 gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.ipc_collect()
+                try:
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.ipc_collect()
+                except Exception as e:
+                    if "CUDA error" in str(e):
+                        script_callbacks.cuda_error_callback(e)
+
                 busy_time += task_used_time
     logger.info(f"worker thread: endded")
 

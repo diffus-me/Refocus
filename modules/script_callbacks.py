@@ -101,6 +101,10 @@ def after_task_callback(task_id: str):
     invoke_callbacks('callbacks_after_task', task_id)
 
 
+def cuda_error_callback(ex: Exception):
+    invoke_callbacks('callbacks_cuda_error', ex)
+
+
 def image_saved_callback(params: ImageSaveParams):
     invoke_callbacks('callbacks_image_saved', params)
 
@@ -132,6 +136,10 @@ def on_before_task(callback):
 
 def on_after_task(callback):
     add_callback(callback_map['callbacks_after_task'], callback)
+
+
+def on_cuda_error(callback):
+    add_callback(callback_map['callbacks_cuda_error'], callback)
 
 
 def on_image_saved(callback):
