@@ -4,12 +4,12 @@ formatters:
   default:
     "()": uvicorn.logging.DefaultFormatter
     datefmt: "%Y-%m-%d %H:%M:%S"
-    format: '%(levelprefix)s %(asctime)s - %(message)s (%(pathname)s %(funcName)s %(lineno)d)'
+    format: '%(levelprefix)s %(asctime)s - %(message)s (%(pathname)s %(funcName)s %(filename)s %(lineno)d)'
     use_colors: False
   default_colored:
     "()": uvicorn.logging.DefaultFormatter
     datefmt: "%Y-%m-%d %H:%M:%S"
-    format: '%(levelprefix)s %(asctime)s (%(funcName)s) - %(message)s'
+    format: '%(levelprefix)s %(asctime)s (%(funcName)s) %(filename)s %(lineno)d - %(message)s'
     use_colors: True
   access:
     "()": uvicorn.logging.AccessFormatter
